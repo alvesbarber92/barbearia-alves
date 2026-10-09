@@ -30,7 +30,7 @@ export default function OnboardingPage() {
   const [corEscolhida, setCorEscolhida] = useState(null)
   const cor = corEscolhida ?? salon?.cor_primaria ?? COR_PADRAO
   useAccent(cor)
-  const [servico, setServico] = useState({ nome: '', preco: '' })
+  const [servico, setServico] = useState({ nome: '', duracao: '30', preco: '' })
 
   const handleNomeChange = (e) => {
     const nome = e.target.value
@@ -105,6 +105,8 @@ export default function OnboardingPage() {
 
   const saveStep2 = async () => {
     if (!servico.nome || !servico.preco) { toast.error('Preencha nome e preço'); return }
+    const duracao = parseInt(servico.duracao)
+    if (!(duracao >= 5)) { toast.error('Informe o tempo do serviço (mínimo 5 minutos)'); return }
     if (parseFloat(servico.preco) > TETO_PRECO) { toast.error(MSG_TETO_PRECO); return }
     if (!salon) { toast.error('Aguarde, carregando dados...'); return }
     setLoading(true)
@@ -113,7 +115,7 @@ export default function OnboardingPage() {
         salon_id: salon.id,
         nome: servico.nome,
         preco: parseFloat(servico.preco),
-        duracao: 60,
+        duracao,
         ativo: true,
       })
       if (error) { toast.error('Erro ao salvar'); return }
@@ -259,6 +261,12 @@ export default function OnboardingPage() {
                 <label className="text-apoio font-semibold text-cal-2" htmlFor="onb-servico">Nome do serviço</label>
                 <input id="onb-servico" value={servico.nome} onChange={e => setServico(p => ({ ...p, nome: e.target.value }))}
                   className="input-base" placeholder="Ex: Corte e barba" />
+              </div>
+              <div className="space-y-1">
+                <label className="text-apoio font-semibold text-cal-2" htmlFor="onb-duracao">Tempo (minutos)</label>
+                <input id="onb-duracao" type="number" min="5" step="5" value={servico.duracao}
+                  onChange={e => setServico(p => ({ ...p, duracao: e.target.value }))}
+                  className="input-base num" placeholder="30" />
               </div>
               <div className="space-y-1">
                 <label className="text-apoio font-semibold text-cal-2" htmlFor="onb-preco">Preço (R$)</label>

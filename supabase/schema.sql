@@ -425,6 +425,40 @@ AS $function$
 $function$
 ;
 
+CREATE OR REPLACE FUNCTION public.admin_uso_banco()
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+begin
+  if not public.eh_admin() then
+    raise exception 'nao_autorizado' using errcode = 'P0001';
+  end if;
+
+  return jsonb_build_object(
+    'banco_bytes',          pg_database_size(current_database()),
+    'arquivos_bytes',       (select coalesce(sum((o.metadata->>'size')::bigint), 0) from storage.objects o),
+    'arquivos_qtd',         (select count(*) from storage.objects),
+    'usuarios_total',       (select count(*) from auth.users),
+    'usuarios_ativos_30d',  (select count(*) from auth.users u where u.last_sign_in_at > now() - interval '30 days'),
+    'tabelas', coalesce((
+      select jsonb_agg(t order by t.bytes desc)
+      from (
+        select s.relname::text                    as nome,
+               pg_total_relation_size(s.relid)    as bytes,
+               s.n_live_tup                       as linhas
+        from pg_stat_user_tables s
+        where s.schemaname = 'public'
+        order by pg_total_relation_size(s.relid) desc
+        limit 8
+      ) t
+    ), '[]'::jsonb)
+  );
+end
+$function$
+;
+
 CREATE OR REPLACE FUNCTION public.cancelar_meu_agendamento(p_agendamento_id uuid)
  RETURNS void
  LANGUAGE plpgsql
@@ -1656,6 +1690,8 @@ revoke execute on function public.criar_salao_com_convite(p_nome text, p_slug te
 grant  execute on function public.criar_salao_com_convite(p_nome text, p_slug text, p_codigo text, p_whatsapp text, p_termos_aceitos_em timestamp with time zone, p_termos_versao text) to authenticated;
 revoke execute on function public.admin_listar_saloes() from public, anon;
 grant  execute on function public.admin_listar_saloes() to authenticated;
+revoke execute on function public.admin_uso_banco() from public, anon;
+grant  execute on function public.admin_uso_banco() to authenticated;
 revoke execute on function public.admin_definir_modulo(p_salon_id uuid, p_modulo text, p_disponivel boolean) from public, anon;
 grant  execute on function public.admin_definir_modulo(p_salon_id uuid, p_modulo text, p_disponivel boolean) to authenticated;
 revoke execute on function public.admin_definir_situacao_salao(p_salon_id uuid, p_ativo boolean) from public, anon;

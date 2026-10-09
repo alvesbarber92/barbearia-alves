@@ -4,7 +4,7 @@ import PageHeader from '../../components/ui/PageHeader'
 import { supabase } from '../../lib/supabase'
 import { Skeleton, SkeletonCard } from '../../components/ui/Skeleton'
 import EmptyState from '../../components/ui/EmptyState'
-import PainelConvites from './PainelConvites'
+import PainelUso from './PainelUso'
 import { Eye, LogOut, Search, Store, X } from 'lucide-react'
 import toast from 'react-hot-toast'
 
@@ -216,7 +216,7 @@ export default function AdminPage() {
           }
         />
 
-        <PainelConvites />
+        <PainelUso />
 
         <div className="relative">
           <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none text-cal-3" />
