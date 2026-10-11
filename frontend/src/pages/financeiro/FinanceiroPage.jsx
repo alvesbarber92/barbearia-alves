@@ -40,13 +40,15 @@ export default function FinanceiroPage() {
   const [atendimentosHoje, setAtendimentosHoje] = useState([])
   const [receitaMesAtual, setReceitaMesAtual] = useState(0)
   const [previstoMesAtual, setPrevistoMesAtual] = useState(0)
+  const [debitosMesAtual, setDebitosMesAtual] = useState(0)
 
   const agora = new Date()
   const [mesSel, setMesSel] = useState({ year: agora.getFullYear(), month: agora.getMonth() })
-  const [dadosMes, setDadosMes] = useState({ chave: null, lista: [] })
+  const [dadosMes, setDadosMes] = useState({ chave: null, lista: [], debitos: [] })
   const chaveMes = `${salon?.id ?? ""}:${mesSel.year}-${mesSel.month}`
   const loadingMes = !salon?.id || dadosMes.chave !== chaveMes
   const atendimentosMes = dadosMes.lista
+  const debitosMes = dadosMes.debitos
 
   const [loadingKpis, setLoadingKpis] = useState(true)
   const [kpis, setKpis] = useState(null)
@@ -74,7 +76,13 @@ export default function FinanceiroPage() {
         .eq('status', 'confirmado')
         .gte('data_hora', inicioMes(ano, mes))
         .lt('data_hora', inicioMesSeguinte(ano, mes)),
-    ]).then(([resHoje, resMes]) => {
+      supabase
+        .from('debitos')
+        .select('valor')
+        .eq('salon_id', salon.id)
+        .gte('pago_em', inicioMes(ano, mes))
+        .lt('pago_em', inicioMesSeguinte(ano, mes)),
+    ]).then(([resHoje, resMes, resDebitos]) => {
       setAtendimentosHoje(resHoje.data || [])
       const agoraTs = new Date()
       const doMes = resMes.data || []
@@ -83,6 +91,7 @@ export default function FinanceiroPage() {
         doMes.filter(a => new Date(a.data_hora) > agoraTs)
              .reduce((s, a) => s + Number(a.valor || 0), 0)
       )
+      setDebitosMesAtual((resDebitos.data || []).reduce((s, d) => s + Number(d.valor || 0), 0))
       setLoadingHoje(false)
     })
   }, [salon?.id])
@@ -93,17 +102,26 @@ export default function FinanceiroPage() {
     const { year, month } = mesSel
     let cancelado = false
 
-    supabase
-      .from('agendamentos')
-      .select('*, clientes(nome)')
-      .eq('salon_id', salonId)
-      .eq('status', 'confirmado')
-      .gte('data_hora', inicioMes(year, month))
-      .lt('data_hora', inicioMesSeguinte(year, month))
-      .order('data_hora', { ascending: false })
-      .then(({ data }) => {
-        if (!cancelado) setDadosMes({ chave: `${salonId}:${year}-${month}`, lista: data || [] })
-      })
+    Promise.all([
+      supabase
+        .from('agendamentos')
+        .select('*, clientes(nome)')
+        .eq('salon_id', salonId)
+        .eq('status', 'confirmado')
+        .gte('data_hora', inicioMes(year, month))
+        .lt('data_hora', inicioMesSeguinte(year, month))
+        .order('data_hora', { ascending: false }),
+      supabase
+        .from('debitos')
+        .select('id, nome, descricao, valor, pago_em')
+        .eq('salon_id', salonId)
+        .gte('pago_em', inicioMes(year, month))
+        .lt('pago_em', inicioMesSeguinte(year, month)),
+    ]).then(([resAgend, resDebitos]) => {
+      if (!cancelado) {
+        setDadosMes({ chave: `${salonId}:${year}-${month}`, lista: resAgend.data || [], debitos: resDebitos.data || [] })
+      }
+    })
 
     return () => { cancelado = true }
   }, [salon?.id, mesSel])
@@ -162,9 +180,20 @@ export default function FinanceiroPage() {
 
   const agoraMes = new Date()
   const realizadosMes = atendimentosMes.filter(a => a.status === 'confirmado' && new Date(a.data_hora) <= agoraMes)
-  const receitaMesSel = realizadosMes.reduce((s, a) => s + Number(a.valor || 0), 0)
+  const receitaAtendMesSel = realizadosMes.reduce((s, a) => s + Number(a.valor || 0), 0)
+  const debitosRecebidosMesSel = debitosMes.reduce((s, d) => s + Number(d.valor || 0), 0)
+  const receitaMesSel = receitaAtendMesSel + debitosRecebidosMesSel
   const qtdMesSel = realizadosMes.length
-  const ticketMesSel = qtdMesSel > 0 ? receitaMesSel / qtdMesSel : 0
+  const ticketMesSel = qtdMesSel > 0 ? receitaAtendMesSel / qtdMesSel : 0
+  const linhasMes = [
+    ...realizadosMes.map(a => ({
+      id: a.id, quando: a.data_hora, nome: a.clientes?.nome, servico: a.servico, valor: a.valor, debito: false,
+    })),
+    ...debitosMes.map(d => ({
+      id: `d-${d.id}`, quando: d.pago_em, nome: d.nome,
+      servico: d.descricao ? `Débito recebido · ${d.descricao}` : 'Débito recebido', valor: d.valor, debito: true,
+    })),
+  ].sort((a, b) => new Date(b.quando) - new Date(a.quando))
 
   function prevMes() {
     setMesSel(prev => {
@@ -203,10 +232,11 @@ export default function FinanceiroPage() {
           sub={previstoHoje > 0 ? `+ ${brlCompacto(previstoHoje)} previsto` : 'atendimentos hoje'} />
         <StatCard icon={Calendar}   label="Agendamentos hoje" value={qtdHoje}                    sub="já realizados" />
         <StatCard icon={TrendingUp} label="Ticket médio"      value={brlCompacto(ticketHoje)}      sub="por atendimento" />
-        <StatCard icon={DollarSign} label="Total do mês"      value={brlCompacto(receitaMesAtual)}
-          sub={previstoMesAtual > 0
-            ? `inclui ${brlCompacto(previstoMesAtual)} a realizar`
-            : nomeMes(agora.getFullYear(), agora.getMonth())} />
+        <StatCard icon={DollarSign} label="Total do mês"      value={brlCompacto(receitaMesAtual + debitosMesAtual)}
+          sub={[
+            previstoMesAtual > 0 && `inclui ${brlCompacto(previstoMesAtual)} a realizar`,
+            debitosMesAtual > 0 && `${brlCompacto(debitosMesAtual)} de débitos`,
+          ].filter(Boolean).join(' · ') || nomeMes(agora.getFullYear(), agora.getMonth())} />
       </div>
 
       <div className="card">
@@ -261,12 +291,13 @@ export default function FinanceiroPage() {
         ) : (
           <>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <MiniStat label="Total do mês" value={brlCompacto(receitaMesSel)} sub="já realizados" />
+              <MiniStat label="Total do mês" value={brlCompacto(receitaMesSel)}
+                sub={debitosRecebidosMesSel > 0 ? `inclui ${brlCompacto(debitosRecebidosMesSel)} de débitos recebidos` : 'já realizados'} />
               <MiniStat label="Atendimentos" value={qtdMesSel} />
               <MiniStat label="Ticket médio" value={brlCompacto(ticketMesSel)} />
             </div>
 
-            {realizadosMes.length === 0 ? (
+            {linhasMes.length === 0 ? (
               <p className="text-sm py-3 text-center text-cal-3">
                 Nenhum atendimento realizado em {nomeMes(mesSel.year, mesSel.month)}
               </p>
@@ -288,18 +319,18 @@ export default function FinanceiroPage() {
                 </div>
 
                 <div className="max-h-72 overflow-y-auto pr-1">
-                  {realizadosMes.map(a => (
+                  {linhasMes.map(l => (
                     <div
-                      key={a.id}
+                      key={l.id}
                       className="grid gap-2 py-2.5 hover:bg-elevado rounded-controle px-1 -mx-1 transition-colors items-center"
                       style={COLUNAS_MES}
                     >
-                      <p className="text-xs num text-cal-2">{formatData(a.data_hora)}</p>
-                      <p className="text-xs num text-cal-3">{formatHora(a.data_hora)}</p>
-                      <p className="text-sm truncate text-cal">{a.clientes?.nome || '—'}</p>
-                      <p className="text-xs truncate text-cal-3">{a.servico || '—'}</p>
+                      <p className="text-xs num text-cal-2">{formatData(l.quando)}</p>
+                      <p className="text-xs num text-cal-3">{formatHora(l.quando)}</p>
+                      <p className="text-sm truncate text-cal">{l.nome || '—'}</p>
+                      <p className={`text-xs truncate ${l.debito ? 'text-ok' : 'text-cal-3'}`}>{l.servico || '—'}</p>
                       <p className="text-sm font-semibold num text-right text-cal">
-                        {a.valor ? brlCompacto(a.valor) : '—'}
+                        {l.valor ? brlCompacto(l.valor) : '—'}
                       </p>
                     </div>
                   ))}
