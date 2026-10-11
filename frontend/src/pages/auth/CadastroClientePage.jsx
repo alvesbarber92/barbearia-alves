@@ -52,7 +52,7 @@ export default function CadastroClientePage() {
         <div className="flex flex-col items-center mb-8 text-center">
           <img src="/logo.png" alt="" className="w-12 h-12 mb-3" />
           <h1 className="font-display text-tela">Crie sua conta</h1>
-          <p className="text-apoio text-cal-2 mt-1">Agende serviços na sua barbearia favorita</p>
+          <p className="text-apoio text-cal-2 mt-1">Agende seu horário na Alves BarberShop</p>
         </div>
 
         <form onSubmit={handleSubmit} className="card space-y-4">
@@ -97,7 +97,7 @@ export default function CadastroClientePage() {
           </p>
           <p className="text-center text-apoio text-cal-2">
             É dono de barbearia?{' '}
-            <Link to="/cadastro" className="font-semibold text-gelo">
+            <Link to="/quero-meu-salao" className="font-semibold text-gelo">
               Cadastre sua barbearia
             </Link>
           </p>

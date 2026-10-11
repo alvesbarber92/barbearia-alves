@@ -5,7 +5,6 @@ import { supabase } from './lib/supabase'
 import { destinoAposLogin } from './lib/destinoAposLogin'
 
 import LoginPage from './pages/auth/LoginPage'
-import CadastroPage from './pages/auth/CadastroPage'
 import CadastroClientePage from './pages/auth/CadastroClientePage'
 import EsqueciSenhaPage from './pages/auth/EsqueciSenhaPage'
 import RedefinirSenhaPage from './pages/auth/RedefinirSenhaPage'
@@ -110,7 +109,6 @@ export default function App() {
     <Routes>
       <Route path="/" element={<Inicio />} />
       <Route path="/login" element={<LoginPage />} />
-      <Route path="/cadastro" element={<CadastroPage />} />
       <Route path="/cadastro-cliente" element={<CadastroClientePage />} />
 
       <Route path="/esqueci-senha" element={<EsqueciSenhaPage />} />
