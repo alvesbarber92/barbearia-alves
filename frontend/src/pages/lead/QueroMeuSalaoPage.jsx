@@ -20,7 +20,7 @@ export default function QueroMeuSalaoPage() {
 
         <div className="text-center mb-6">
           <img src="/logo.png" alt="" className="w-11 h-11 mx-auto mb-4" />
-          <p className="text-apoio font-semibold text-cal-2">BarberVez</p>
+          <p className="text-apoio font-semibold text-cal-2">Alves BarberShop</p>
           <h1 className="font-display text-tela mt-1">
             Quero minha barbearia no sistema
           </h1>

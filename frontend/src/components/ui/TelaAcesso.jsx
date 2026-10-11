@@ -12,7 +12,7 @@ export default function TelaAcesso({ children }) {
             <div className="flex items-center gap-2.5">
               <img src="/logo.png" alt="" className="w-9 h-9 flex-shrink-0" />
               <span className="font-display text-card">
-                BarberVez
+                Alves BarberShop
               </span>
             </div>
           </div>
@@ -20,7 +20,7 @@ export default function TelaAcesso({ children }) {
           {children}
         </div>
 
-        <p className="text-micro text-cal-2 text-center mt-6">© 2026 BarberVez</p>
+        <p className="text-micro text-cal-2 text-center mt-6">© 2026 Alves BarberShop</p>
       </main>
     </div>
   )

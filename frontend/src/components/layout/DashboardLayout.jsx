@@ -57,7 +57,7 @@ export default function DashboardLayout() {
         <div className="flex items-center gap-2.5 px-5 py-5 border-b border-junta">
           <Monogram nome={salon?.nome} logoUrl={salon?.logo_url} />
           <span className="font-display truncate text-cal">
-            {salon?.nome || 'BarberVez'}
+            {salon?.nome || 'Alves BarberShop'}
           </span>
         </div>
 

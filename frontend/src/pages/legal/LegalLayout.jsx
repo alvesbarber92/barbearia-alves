@@ -14,7 +14,7 @@ export default function LegalLayout({ titulo, resumo, children }) {
           Voltar
         </Link>
 
-        <p className="text-apoio font-semibold text-cal-2 mb-2">BarberVez</p>
+        <p className="text-apoio font-semibold text-cal-2 mb-2">Alves BarberShop</p>
         <h1 className="font-display text-3xl sm:text-4xl font-semibold tracking-tight text-cal">
           {titulo}
         </h1>

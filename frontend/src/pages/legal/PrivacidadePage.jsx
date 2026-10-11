@@ -5,12 +5,12 @@ export default function PrivacidadePage() {
   return (
     <LegalLayout
       titulo="Política de Privacidade"
-      resumo="Quais dados o BarberVez trata, para quê, com quem compartilha e como você pede para vê-los ou apagá-los."
+      resumo="Quais dados a Alves BarberShop trata, para quê, com quem compartilha e como você pede para vê-los ou apagá-los."
     >
       <Secao numero="1" titulo="Quem responde pelos seus dados">
         <p>
           Quando você agenda em uma barbearia, é <strong>aquela barbearia</strong> quem decide
-          o que fazer com seus dados — ela é a controladora. O BarberVez trata os dados
+          o que fazer com seus dados — ela é a controladora. A Alves BarberShop trata os dados
           por ordem dela, como operador: armazena, organiza e devolve na tela, sem usar
           para finalidade própria.
         </p>

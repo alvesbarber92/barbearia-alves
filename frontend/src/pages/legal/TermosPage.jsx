@@ -6,11 +6,11 @@ export default function TermosPage() {
   return (
     <LegalLayout
       titulo="Termos de Uso"
-      resumo="Estas são as regras de uso do BarberVez. Elas valem para a barbearia que contrata a plataforma e para o cliente que agenda por ela."
+      resumo="Estas são as regras de uso do sistema da Alves BarberShop. Elas valem para a barbearia que contrata a plataforma e para o cliente que agenda por ela."
     >
       <Secao numero="1" titulo="Quem é quem">
         <p>
-          O <strong>BarberVez</strong> é a plataforma de gestão, operada por{' '}
+          A <strong>Alves BarberShop</strong> é a plataforma de gestão, operada por{' '}
           Ricardo Parise Macarios Junior, contato{' '}
           <a href={`mailto:${EMAIL_CONTATO}`} className="underline">{EMAIL_CONTATO}</a>.
         </p>
