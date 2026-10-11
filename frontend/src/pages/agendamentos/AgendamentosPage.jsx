@@ -115,6 +115,8 @@ export default function AgendamentosPage() {
   const [horarios,     setHorarios]     = useState({})
   const [especiais,    setEspeciais]    = useState({})
   const [pausasDia,    setPausasDia]    = useState({})
+  const [bloqueios,    setBloqueios]    = useState({})
+  const [modoBloqueio, setModoBloqueio] = useState(false)
   const [pausaEdit,    setPausaEdit]    = useState(null)
   const [agendFormDia, setAgendFormDia] = useState([])
   const [showModal, setShowModal]       = useState(false)
@@ -199,6 +201,18 @@ export default function AgendamentosPage() {
         ;(data || []).forEach(p => { map[p.data] = { inicio: p.inicio, minutos: p.minutos } })
         setPausasDia(map)
       })
+    supabase.from('bloqueios_horario').select('id, data, inicio, minutos')
+      .eq('salon_id', salon.id)
+      .gte('data', chaveDia(desde))
+      .order('inicio')
+      .then(({ data }) => {
+        const map = {}
+        ;(data || []).forEach(b => {
+          if (!map[b.data]) map[b.data] = []
+          map[b.data].push({ id: b.id, inicio: b.inicio, minutos: b.minutos })
+        })
+        setBloqueios(map)
+      })
   }, [salon?.id])
 
   useEffect(() => {
@@ -234,11 +248,13 @@ export default function AgendamentosPage() {
     const h = horarios[dia.getDay()]
     return { pausa: h?.pausa_inicio ? { inicio: h.pausa_inicio.slice(0, 5), minutos: h.pausa_minutos } : null, doDia: false }
   }
-  const comPausa = (dia, lista) => {
+  const comIndisponiveis = (dia, lista) => {
     const { pausa } = infoPausa(dia)
-    return pausa
-      ? [...lista, { data_hora: horaParaDate(dia, pausa.inicio).toISOString(), duracao: pausa.minutos }]
-      : lista
+    const extras = (bloqueios[chaveDia(dia)] || []).map(b => ({
+      data_hora: horaParaDate(dia, b.inicio).toISOString(), duracao: b.minutos,
+    }))
+    if (pausa) extras.push({ data_hora: horaParaDate(dia, pausa.inicio).toISOString(), duracao: pausa.minutos })
+    return extras.length ? [...lista, ...extras] : lista
   }
 
   const estadosCal = useMemo(() => Object.fromEntries(
@@ -252,7 +268,7 @@ export default function AgendamentosPage() {
   const hDiaAtivo   = horarioDoDia(diaAtivo)
   const duracaoMinima = servicos.length ? Math.min(...servicos.map(s => s.duracao)) : 30
   const slotsLivres = (hDiaAtivo ? gerarSlots(diaAtivo, hDiaAtivo) : [])
-    .filter(s => servicoCabe(s, duracaoMinima, comPausa(diaAtivo, agendDia), horaParaDate(diaAtivo, hDiaAtivo.fechamento)))
+    .filter(s => servicoCabe(s, duracaoMinima, comIndisponiveis(diaAtivo, agendDia), horaParaDate(diaAtivo, hDiaAtivo.fechamento)))
     .filter(s => s > agora)
 
   const abrirModal = (slot = null) => {
@@ -285,7 +301,7 @@ export default function AgendamentosPage() {
     const dur = servicos.find(s => s.id === servicoId)?.duracao ?? duracaoMinima
     const fechamento = horaParaDate(formDia, hFormDia.fechamento)
     return gerarSlots(formDia, hFormDia)
-      .filter(s => servicoCabe(s, dur, comPausa(formDia, agendFormDia), fechamento))
+      .filter(s => servicoCabe(s, dur, comIndisponiveis(formDia, agendFormDia), fechamento))
       .filter(s => s > agora)
   }
   const slotsModal = horariosDoForm(form.servico)
@@ -400,6 +416,7 @@ export default function AgendamentosPage() {
   }
 
   const pausaAtiva = infoPausa(diaAtivo)
+  const bloqueadosDoDia = bloqueios[chaveDia(diaAtivo)] || []
   const pausaPadraoDoDia = (() => {
     const h = horarios[diaAtivo.getDay()]
     return h?.pausa_inicio ? { inicio: h.pausa_inicio.slice(0, 5), minutos: h.pausa_minutos } : null
@@ -410,6 +427,34 @@ export default function AgendamentosPage() {
     minutos: pausaAtiva.pausa?.minutos ?? pausaPadraoDoDia?.minutos ?? 60,
     conflitos: null,
   })
+
+  const bloquearSlot = async (slot) => {
+    const data = chaveDia(diaAtivo)
+    const inicio = formatHora(slot)
+    const { data: linha, error } = await supabase.from('bloqueios_horario')
+      .insert({ salon_id: salon.id, data, inicio, minutos: 30 })
+      .select('id, inicio, minutos').single()
+    if (error) { toast.error('Erro ao bloquear o horário'); return }
+    setBloqueios(m => ({
+      ...m,
+      [data]: [...(m[data] || []), linha].sort((a, b) => (a.inicio < b.inicio ? -1 : 1)),
+    }))
+    toast.success(`${inicio} bloqueado`)
+  }
+
+  const liberarBloqueio = async (b) => {
+    const data = chaveDia(diaAtivo)
+    const { error } = await supabase.from('bloqueios_horario').delete().eq('id', b.id)
+    if (error) { toast.error('Erro ao liberar o horário'); return }
+    setBloqueios(m => {
+      const lista = (m[data] || []).filter(x => x.id !== b.id)
+      const n = { ...m }
+      if (lista.length) n[data] = lista
+      else delete n[data]
+      return n
+    })
+    toast.success(`${String(b.inicio).slice(0, 5)} liberado`)
+  }
 
   const gravarPausaDia = async (linha) => {
     const data = chaveDia(diaAtivo)
@@ -474,6 +519,7 @@ export default function AgendamentosPage() {
   const selecionarDia = (d) => {
     const dia = new Date(d); dia.setHours(0, 0, 0, 0)
     setDiaAtivo(dia)
+    setModoBloqueio(false)
     if (!dias.some(x => isSameDay(x, dia))) setAncora(dia)
     if (dia.getMonth() !== mesCal.mes || dia.getFullYear() !== mesCal.ano) {
       setMesCal({ ano: dia.getFullYear(), mes: dia.getMonth() })
@@ -601,7 +647,20 @@ export default function AgendamentosPage() {
       </div>
 
       <div className="card">
-        <p className="text-sm font-semibold mb-3 text-cal-2">Horários livres</p>
+        <div className="flex items-center justify-between gap-3 mb-3">
+          <p className="text-sm font-semibold text-cal-2">Horários livres</p>
+          {!diaPassado && hDiaAtivo && (
+            <button type="button" onClick={() => setModoBloqueio(v => !v)}
+              className="text-apoio font-semibold underline underline-offset-2 flex-shrink-0 text-cal-2 hover:text-acento-texto">
+              {modoBloqueio ? 'Concluir' : 'Bloquear horário'}
+            </button>
+          )}
+        </div>
+        {modoBloqueio && (
+          <p className="text-xs mb-3 text-cal-3">
+            Toque nos horários em que você não vai atender. Ninguém marca neles — nem pelo link, nem por aqui.
+          </p>
+        )}
         {slotsLivres.length === 0
           ? (
             <p className="text-sm text-cal-3">
@@ -619,9 +678,14 @@ export default function AgendamentosPage() {
                   </p>
                   <div className="flex flex-wrap gap-2">
                     {g.slots.map(slot => (
-                      <button key={slot.toISOString()} onClick={() => abrirModal(slot)}
-                        aria-label={`Agendar às ${formatHora(slot)}`}
-                        className="px-3.5 py-1.5 rounded-controle text-sm num border transition-colors hover:border-acento-filete hover:text-acento-texto border-junta-forte text-cal bg-bancada"
+                      <button key={slot.toISOString()}
+                        onClick={() => (modoBloqueio ? bloquearSlot(slot) : abrirModal(slot))}
+                        aria-label={modoBloqueio ? `Bloquear ${formatHora(slot)}` : `Agendar às ${formatHora(slot)}`}
+                        className={`px-3.5 py-1.5 rounded-controle text-sm num border transition-colors bg-bancada ${
+                          modoBloqueio
+                            ? 'border-junta-forte text-cal-2 hover:border-warn hover:text-warn'
+                            : 'border-junta-forte text-cal hover:border-acento-filete hover:text-acento-texto'
+                        }`}
                       >
                         {formatHora(slot)}
                       </button>
@@ -632,6 +696,23 @@ export default function AgendamentosPage() {
             </div>
           )
         }
+
+        {bloqueadosDoDia.length > 0 && (
+          <div className="mt-4 pt-4 border-t border-junta">
+            <p className="regua mb-2">Bloqueados</p>
+            <div className="flex flex-wrap gap-2">
+              {bloqueadosDoDia.map(b => (
+                <button key={b.id} type="button" onClick={() => liberarBloqueio(b)}
+                  aria-label={`Liberar ${String(b.inicio).slice(0, 5)}`}
+                  className="px-3.5 py-1.5 rounded-controle text-sm num border line-through transition-colors border-junta-forte text-cal-3 bg-bancada hover:text-cal hover:border-latao"
+                >
+                  {String(b.inicio).slice(0, 5)}
+                </button>
+              ))}
+            </div>
+            <p className="text-xs mt-2 text-cal-3">Toque para liberar de novo.</p>
+          </div>
+        )}
       </div>
 
         </div>

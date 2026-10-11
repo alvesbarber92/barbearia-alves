@@ -53,6 +53,15 @@ create table public.auditoria_admin (
   criado_em timestamp with time zone default now() not null
 );
 
+create table public.bloqueios_horario (
+  id uuid default gen_random_uuid() not null,
+  salon_id uuid not null,
+  data date not null,
+  inicio time without time zone not null,
+  minutos integer not null,
+  criado_em timestamp with time zone default now() not null
+);
+
 create table public.clientes (
   id uuid default gen_random_uuid() not null,
   salon_id uuid not null,
@@ -201,6 +210,10 @@ alter table public.agendamentos add constraint agendamentos_servico_id_fkey FORE
 alter table public.auditoria_admin add constraint auditoria_admin_pkey PRIMARY KEY (id);
 alter table public.auditoria_admin add constraint auditoria_admin_admin_id_fkey FOREIGN KEY (admin_id) REFERENCES auth.users(id);
 alter table public.auditoria_admin add constraint auditoria_admin_salon_id_fkey FOREIGN KEY (salon_id) REFERENCES salons(id) ON DELETE SET NULL;
+alter table public.bloqueios_horario add constraint bloqueios_horario_pkey PRIMARY KEY (id);
+alter table public.bloqueios_horario add constraint bloqueios_horario_unico UNIQUE (salon_id, data, inicio);
+alter table public.bloqueios_horario add constraint bloqueios_horario_minutos_check CHECK (((minutos >= 5) AND (minutos <= 480)));
+alter table public.bloqueios_horario add constraint bloqueios_horario_salon_id_fkey FOREIGN KEY (salon_id) REFERENCES salons(id) ON DELETE CASCADE;
 alter table public.clientes add constraint clientes_pkey PRIMARY KEY (id);
 alter table public.clientes add constraint clientes_auth_user_id_fkey FOREIGN KEY (auth_user_id) REFERENCES auth.users(id) ON DELETE SET NULL;
 alter table public.clientes add constraint clientes_salon_id_fkey FOREIGN KEY (salon_id) REFERENCES salons(id) ON DELETE CASCADE;
@@ -265,6 +278,7 @@ CREATE INDEX idx_agendamentos_salon_data ON public.agendamentos USING btree (sal
 CREATE INDEX idx_agendamentos_salon_id ON public.agendamentos USING btree (salon_id);
 CREATE INDEX idx_agendamentos_fixo ON public.agendamentos USING btree (fixo_id) WHERE (fixo_id IS NOT NULL);
 CREATE INDEX auditoria_admin_salao_idx ON public.auditoria_admin USING btree (salon_id, criado_em DESC);
+CREATE INDEX bloqueios_horario_salon_data_idx ON public.bloqueios_horario USING btree (salon_id, data);
 CREATE INDEX idx_clientes_auth_user_id ON public.clientes USING btree (auth_user_id);
 CREATE INDEX idx_clientes_salon_id ON public.clientes USING btree (salon_id);
 CREATE INDEX idx_estoque_salon_id ON public.estoque USING btree (salon_id);
@@ -596,6 +610,18 @@ begin
     raise exception 'Esse horário é o intervalo da barbearia. Escolha outro.' using errcode = 'P0001';
   end if;
 
+  -- Bloqueio avulso: o dono tirou este horario do dia. Mesma mensagem do
+  -- intervalo, que o AgendarPage ja sabe exibir.
+  if exists (
+    select 1 from bloqueios_horario b
+    where b.salon_id = p_salon_id
+      and b.data = v_dia
+      and v_local < v_dia + b.inicio + make_interval(mins => b.minutos)
+      and v_local + make_interval(mins => v_duracao) > v_dia + b.inicio
+  ) then
+    raise exception 'Esse horário é o intervalo da barbearia. Escolha outro.' using errcode = 'P0001';
+  end if;
+
   select email into v_email from auth.users where id = v_uid;
 
   select c.id into v_cliente
@@ -860,7 +886,14 @@ AS $function$
          (least(p_fim, p_inicio + interval '31 days') at time zone 'America/Sao_Paulo')::date::timestamp,
          interval '1 day') as d
   cross join lateral public.pausa_do_dia(p_salon_id, d::date) as p
-  where p.inicio is not null;
+  where p.inicio is not null
+  union all
+  -- Bloqueios avulsos do periodo, tambem no formato de um agendamento.
+  select (b.data + b.inicio) at time zone 'America/Sao_Paulo', b.minutos
+  from bloqueios_horario b
+  where b.salon_id = p_salon_id
+    and b.data >= (p_inicio at time zone 'America/Sao_Paulo')::date
+    and b.data <= (least(p_fim, p_inicio + interval '31 days') at time zone 'America/Sao_Paulo')::date;
 $function$
 ;
 
@@ -1446,6 +1479,7 @@ CREATE EVENT TRIGGER ensure_rls ON ddl_command_end EXECUTE FUNCTION rls_auto_ena
 alter table public.admin_observando enable row level security;
 alter table public.agendamentos enable row level security;
 alter table public.auditoria_admin enable row level security;
+alter table public.bloqueios_horario enable row level security;
 alter table public.clientes enable row level security;
 alter table public.convites enable row level security;
 alter table public.dias_especiais enable row level security;
@@ -1540,6 +1574,19 @@ create policy horarios_exclusao on public.horarios as PERMISSIVE for DELETE to a
 -- SECURITY DEFINER, que conferem cliente e servico da barbearia.
 create policy horarios_fixos_leitura on public.horarios_fixos as PERMISSIVE for SELECT to authenticated
   using ((salon_id = get_salon_id()));
+
+create policy bloqueios_horario_leitura on public.bloqueios_horario as PERMISSIVE for SELECT to authenticated
+  using ((salon_id = get_salon_id()));
+
+create policy bloqueios_horario_insercao on public.bloqueios_horario as PERMISSIVE for INSERT to authenticated
+  with check ((salon_id = get_salon_id_proprio()));
+
+create policy bloqueios_horario_alteracao on public.bloqueios_horario as PERMISSIVE for UPDATE to authenticated
+  using ((salon_id = get_salon_id_proprio()))
+  with check ((salon_id = get_salon_id_proprio()));
+
+create policy bloqueios_horario_exclusao on public.bloqueios_horario as PERMISSIVE for DELETE to authenticated
+  using ((salon_id = get_salon_id_proprio()));
 
 create policy pausas_dia_leitura on public.pausas_dia as PERMISSIVE for SELECT to authenticated
   using ((salon_id = get_salon_id()));
