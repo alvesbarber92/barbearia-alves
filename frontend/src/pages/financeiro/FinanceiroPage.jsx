@@ -161,12 +161,9 @@ export default function FinanceiroPage() {
   const ticketHoje = qtdHoje > 0 ? receitaHoje / qtdHoje : 0
 
   const agoraMes = new Date()
-  const confirmadosMes = atendimentosMes.filter(a => a.status === 'confirmado')
-  const receitaMesSel = confirmadosMes.reduce((s, a) => s + Number(a.valor || 0), 0)
-  const previstoMesSel = confirmadosMes
-    .filter(a => new Date(a.data_hora) > agoraMes)
-    .reduce((s, a) => s + Number(a.valor || 0), 0)
-  const qtdMesSel = confirmadosMes.length
+  const realizadosMes = atendimentosMes.filter(a => a.status === 'confirmado' && new Date(a.data_hora) <= agoraMes)
+  const receitaMesSel = realizadosMes.reduce((s, a) => s + Number(a.valor || 0), 0)
+  const qtdMesSel = realizadosMes.length
   const ticketMesSel = qtdMesSel > 0 ? receitaMesSel / qtdMesSel : 0
 
   function prevMes() {
@@ -264,15 +261,14 @@ export default function FinanceiroPage() {
         ) : (
           <>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <MiniStat label="Total do mês" value={brlCompacto(receitaMesSel)}
-                sub={previstoMesSel > 0 ? `inclui ${brlCompacto(previstoMesSel)} a realizar` : null} />
+              <MiniStat label="Total do mês" value={brlCompacto(receitaMesSel)} sub="já realizados" />
               <MiniStat label="Atendimentos" value={qtdMesSel} />
               <MiniStat label="Ticket médio" value={brlCompacto(ticketMesSel)} />
             </div>
 
-            {atendimentosMes.length === 0 ? (
+            {realizadosMes.length === 0 ? (
               <p className="text-sm py-3 text-center text-cal-3">
-                Nenhum atendimento em {nomeMes(mesSel.year, mesSel.month)}
+                Nenhum atendimento realizado em {nomeMes(mesSel.year, mesSel.month)}
               </p>
             ) : (
               <div className="overflow-x-auto">
@@ -292,29 +288,21 @@ export default function FinanceiroPage() {
                 </div>
 
                 <div className="max-h-72 overflow-y-auto pr-1">
-                  {atendimentosMes.map(a => {
-                    const futuro = new Date(a.data_hora) > agoraMes
-                    return (
-                      <div
-                        key={a.id}
-                        className="grid gap-2 py-2.5 hover:bg-elevado rounded-controle px-1 -mx-1 transition-colors items-center"
-                        style={COLUNAS_MES}
-                      >
-                        <p className="text-xs num text-cal-2">{formatData(a.data_hora)}</p>
-                        <p className="text-xs num text-cal-3">{formatHora(a.data_hora)}</p>
-                        <p className="text-sm truncate text-cal">{a.clientes?.nome || '—'}</p>
-                        <p className="text-xs truncate text-cal-3">{a.servico || '—'}</p>
-                        <div className="text-right">
-                          <p className="text-sm font-semibold num text-cal">
-                            {a.valor ? brlCompacto(a.valor) : '—'}
-                          </p>
-                          {futuro && (
-                            <p className="text-xs text-cal-3">previsto</p>
-                          )}
-                        </div>
-                      </div>
-                    )
-                  })}
+                  {realizadosMes.map(a => (
+                    <div
+                      key={a.id}
+                      className="grid gap-2 py-2.5 hover:bg-elevado rounded-controle px-1 -mx-1 transition-colors items-center"
+                      style={COLUNAS_MES}
+                    >
+                      <p className="text-xs num text-cal-2">{formatData(a.data_hora)}</p>
+                      <p className="text-xs num text-cal-3">{formatHora(a.data_hora)}</p>
+                      <p className="text-sm truncate text-cal">{a.clientes?.nome || '—'}</p>
+                      <p className="text-xs truncate text-cal-3">{a.servico || '—'}</p>
+                      <p className="text-sm font-semibold num text-right text-cal">
+                        {a.valor ? brlCompacto(a.valor) : '—'}
+                      </p>
+                    </div>
+                  ))}
                 </div>
                 </div>
               </div>
