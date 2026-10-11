@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { destinoAposLogin } from '../../lib/destinoAposLogin'
+import { mensagemErroAuth } from '../../lib/errosAuth'
 import TelaAcesso from '../../components/ui/TelaAcesso'
 import CampoSenha from '../../components/ui/CampoSenha'
 import toast from 'react-hot-toast'
@@ -20,13 +21,7 @@ export default function LoginPage() {
     const { data: authData, error } = await supabase.auth.signInWithPassword(form)
     if (error) {
       console.error('[login]', error)
-      if (error.code === 'email_not_confirmed') {
-        toast.error('Confirme seu e-mail antes de entrar')
-      } else if (error.code === 'invalid_credentials') {
-        toast.error('Email ou senha inválidos')
-      } else {
-        toast.error(error.message)
-      }
+      toast.error(mensagemErroAuth(error, 'Não foi possível entrar. Tente de novo.'))
     } else {
       navigate(await destinoAposLogin(authData.user))
     }

@@ -5,6 +5,7 @@ import CampoSenha from '../../components/ui/CampoSenha'
 import { AvisoLegal } from '../../components/AvisoLegal'
 import toast from 'react-hot-toast'
 import { mascararTelefone, telefoneValido, MSG_TELEFONE_INVALIDO, propsCampoTelefone } from '../../lib/telefone'
+import { mensagemErroAuth } from '../../lib/errosAuth'
 
 export default function CadastroClientePage() {
   const navigate = useNavigate()
@@ -30,7 +31,7 @@ export default function CadastroClientePage() {
       })
 
       if (error) {
-        toast.error(error.message)
+        toast.error(mensagemErroAuth(error, 'Não foi possível criar a conta. Tente de novo.'))
         return
       }
 

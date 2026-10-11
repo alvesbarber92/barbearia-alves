@@ -15,6 +15,7 @@ import { brlCompacto, chaveDia, horarioPadrao, ultimoDiaAgendavelData } from '..
 import { useAccent } from '../../hooks/useAccent'
 import { useConfirmacao } from '../../hooks/useConfirmacao'
 import { mascararTelefone, telefoneValido, MSG_TELEFONE_INVALIDO, propsCampoTelefone } from '../../lib/telefone'
+import { mensagemErroAuth } from '../../lib/errosAuth'
 
 const DIAS_SEMANA = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
 
@@ -312,7 +313,7 @@ export default function AgendarPage() {
       password: authForm.password,
       options: { data: { nome: authForm.nome, telefone: authForm.telefone, role: 'cliente' } },
     })
-    if (error) { toast.error(error.message); setAuthLoading(false); return }
+    if (error) { toast.error(mensagemErroAuth(error, 'Não foi possível criar a conta. Tente de novo.')); setAuthLoading(false); return }
     if (!data.session) {
       toast.success('Confirme seu e-mail para continuar')
       setAuthLoading(false); return
