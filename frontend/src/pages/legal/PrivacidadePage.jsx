@@ -9,27 +9,22 @@ export default function PrivacidadePage() {
     >
       <Secao numero="1" titulo="Quem responde pelos seus dados">
         <p>
-          Quando você agenda em uma barbearia, é <strong>aquela barbearia</strong> quem decide
-          o que fazer com seus dados — ela é a controladora. A Alves BarberShop trata os dados
-          por ordem dela, como operador: armazena, organiza e devolve na tela, sem usar
-          para finalidade própria.
+          A <strong>Alves BarberShop</strong> é a responsável pelos dados tratados neste
+          sistema de agendamento — é ela quem decide como são usados, sempre para
+          organizar os atendimentos.
         </p>
         <p>
-          Na prática: pedidos sobre o conteúdo do seu histórico de atendimento vão à
-          barbearia; pedidos sobre a sua conta de acesso vêm a nós. Podemos encaminhar
-          entre um e outro quando for o caso.
+          Qualquer pedido sobre seus dados ou sobre sua conta vai para{' '}
+          <a href={`mailto:${EMAIL_CONTATO}`} className="underline">{EMAIL_CONTATO}</a>.
         </p>
       </Secao>
 
       <Secao numero="2" titulo="Que dados são tratados">
         <p><strong>Do cliente:</strong> nome, e-mail, telefone, e os agendamentos
         feitos — serviço, data, hora, valor, forma de pagamento e situação.</p>
-        <p><strong>Da barbearia:</strong> nome do estabelecimento, e-mail do
-        proprietário, logo, contato de WhatsApp, serviços, preços e horário de
-        funcionamento.</p>
         <p><strong>Anotações internas:</strong> a barbearia pode registrar observações
-        sobre o atendimento. São dela, de uso interno.</p>
-        <p>Não tratamos dado de cartão — a plataforma não processa pagamento. Não
+        sobre o atendimento e valores em aberto. São de uso interno.</p>
+        <p>Não tratamos dado de cartão — o sistema não processa pagamento. Não
         pedimos CPF, endereço nem dado de saúde.</p>
       </Secao>
 
@@ -47,13 +42,8 @@ export default function PrivacidadePage() {
 
       <Secao numero="4" titulo="Com quem são compartilhados">
         <p>
-          <strong>Com a barbearia em que você agenda</strong> — e somente com ela. Uma barbearia
-          não enxerga cliente nem histórico de outra; a separação é aplicada no banco
-          de dados, não apenas na tela.
-        </p>
-        <p>
-          <strong>Com nossos prestadores de infraestrutura</strong>, que hospedam a
-          aplicação e o banco de dados e cuidam da autenticação, sob obrigação
+          <strong>Com nossos prestadores de infraestrutura</strong>, que hospedam o
+          sistema e o banco de dados e cuidam da autenticação, sob obrigação
           contratual de confidencialidade. Os dados ficam armazenados em servidores em
           São Paulo, no Brasil. O envio de e-mails da conta, como o de redefinição de
           senha, pode passar por prestador com servidores fora do país, com as
@@ -66,12 +56,12 @@ export default function PrivacidadePage() {
 
       <Secao numero="5" titulo="Por quanto tempo">
         <p>
-          O histórico de agendamento fica enquanto a conta da barbearia estiver ativa — é
-          dele que sai o faturamento do estabelecimento, que precisa ser preservado.
+          O histórico de agendamento fica guardado enquanto você tiver conta — é dele
+          que sai o faturamento da barbearia, que precisa ser preservado.
         </p>
         <p>
-          Encerrada a conta da barbearia, os dados são excluídos em até 30 dias, salvo
-          obrigação legal de retenção.
+          Se você pedir a exclusão da conta, os dados são excluídos em até 30 dias,
+          salvo obrigação legal de retenção.
         </p>
       </Secao>
 
@@ -93,9 +83,9 @@ export default function PrivacidadePage() {
 
       <Secao numero="7" titulo="Segurança">
         <p>
-          O acesso é por e-mail e senha, com senha armazenada de forma cifrada. O
-          isolamento entre barbearias é imposto no próprio banco de dados. O tráfego é
-          criptografado em trânsito.
+          O acesso é por e-mail e senha, com senha armazenada de forma cifrada. Cada
+          cliente enxerga apenas os próprios agendamentos, e essa trava é imposta no
+          próprio banco de dados. O tráfego é criptografado em trânsito.
         </p>
         <p>
           Nenhum sistema é imune. Havendo incidente com risco relevante, comunicamos
@@ -120,7 +110,7 @@ export default function PrivacidadePage() {
 
       <Secao numero="10" titulo="Mudanças nesta política">
         <p>
-          Alterações relevantes são avisadas na plataforma antes de valerem. A versão
+          Alterações relevantes são avisadas no sistema antes de valerem. A versão
           vigente fica sempre nesta página, com data de atualização.
         </p>
       </Secao>

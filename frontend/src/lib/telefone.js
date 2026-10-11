@@ -25,12 +25,12 @@ export function telefoneValido(valor) {
   return d.length === 10
 }
 
-export const MSG_TELEFONE_INVALIDO = 'Telefone inválido. Use DDD + número, ex.: (16) 99748-5859'
+export const MSG_TELEFONE_INVALIDO = 'Telefone inválido. Use DDD + número, ex.: (16) 99999-9999'
 
 export const propsCampoTelefone = {
   type: 'tel',
   inputMode: 'numeric',
   maxLength: 15,
   autoComplete: 'tel',
-  placeholder: '(16) 99748-5859',
+  placeholder: '(16) 99999-9999',
 }
