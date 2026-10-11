@@ -6,7 +6,7 @@ import Monogram from '../ui/Monogram'
 import FundoFoto from '../ui/FundoFoto'
 import toast from 'react-hot-toast'
 import {
-  LayoutDashboard, Calendar, Users, Package, DollarSign, Settings, LogOut, Eye
+  LayoutDashboard, Calendar, Users, Package, DollarSign, HandCoins, Settings, LogOut, Eye
 } from 'lucide-react'
 
 const navItems = [
@@ -15,6 +15,7 @@ const navItems = [
   { to: 'clientes',      label: 'Clientes',      icon: Users },
   { to: 'estoque',       label: 'Estoque',       icon: Package,     modulo: 'estoque' },
   { to: 'financeiro',    label: 'Financeiro',    icon: DollarSign },
+  { to: 'debitos',       label: 'Débitos',       icon: HandCoins },
   { to: 'configuracoes', label: 'Configurações', icon: Settings,    curto: 'Ajustes' },
 ]
 

@@ -84,6 +84,19 @@ create table public.convites (
   usado_por uuid
 );
 
+create table public.debitos (
+  id uuid default gen_random_uuid() not null,
+  salon_id uuid not null,
+  cliente_id uuid,
+  nome text not null,
+  telefone text,
+  descricao text,
+  valor numeric not null,
+  data date default ((now() AT TIME ZONE 'America/Sao_Paulo'::text))::date not null,
+  pago_em timestamp with time zone,
+  criado_em timestamp with time zone default now() not null
+);
+
 create table public.dias_especiais (
   id uuid default gen_random_uuid() not null,
   salon_id uuid not null,
@@ -221,6 +234,11 @@ alter table public.convites add constraint convites_pkey PRIMARY KEY (codigo);
 alter table public.convites add constraint convites_criado_por_fkey FOREIGN KEY (criado_por) REFERENCES auth.users(id) ON DELETE SET NULL;
 alter table public.convites add constraint convites_salon_id_fkey FOREIGN KEY (salon_id) REFERENCES salons(id) ON DELETE SET NULL;
 alter table public.convites add constraint convites_usado_por_fkey FOREIGN KEY (usado_por) REFERENCES auth.users(id) ON DELETE SET NULL;
+alter table public.debitos add constraint debitos_pkey PRIMARY KEY (id);
+alter table public.debitos add constraint debitos_nome_preenchido CHECK ((length(btrim(nome)) > 0));
+alter table public.debitos add constraint debitos_valor_ate_100k CHECK (((valor > (0)::numeric) AND (valor <= 99999.99)));
+alter table public.debitos add constraint debitos_salon_id_fkey FOREIGN KEY (salon_id) REFERENCES salons(id) ON DELETE CASCADE;
+alter table public.debitos add constraint debitos_cliente_id_fkey FOREIGN KEY (cliente_id) REFERENCES clientes(id) ON DELETE SET NULL;
 alter table public.dias_especiais add constraint dias_especiais_pkey PRIMARY KEY (id);
 alter table public.dias_especiais add constraint dias_especiais_salon_id_data_key UNIQUE (salon_id, data);
 alter table public.dias_especiais add constraint dias_especiais_horario_check CHECK (((fechado AND (abertura IS NULL) AND (fechamento IS NULL)) OR ((NOT fechado) AND (abertura IS NOT NULL) AND (fechamento IS NOT NULL) AND (fechamento > abertura))));
@@ -281,6 +299,7 @@ CREATE INDEX auditoria_admin_salao_idx ON public.auditoria_admin USING btree (sa
 CREATE INDEX bloqueios_horario_salon_data_idx ON public.bloqueios_horario USING btree (salon_id, data);
 CREATE INDEX idx_clientes_auth_user_id ON public.clientes USING btree (auth_user_id);
 CREATE INDEX idx_clientes_salon_id ON public.clientes USING btree (salon_id);
+CREATE INDEX debitos_salon_idx ON public.debitos USING btree (salon_id, pago_em);
 CREATE INDEX idx_estoque_salon_id ON public.estoque USING btree (salon_id);
 CREATE INDEX idx_horarios_salon_id ON public.horarios USING btree (salon_id);
 CREATE INDEX idx_horarios_fixos_salon ON public.horarios_fixos USING btree (salon_id) WHERE ativo;
@@ -1482,6 +1501,7 @@ alter table public.auditoria_admin enable row level security;
 alter table public.bloqueios_horario enable row level security;
 alter table public.clientes enable row level security;
 alter table public.convites enable row level security;
+alter table public.debitos enable row level security;
 alter table public.dias_especiais enable row level security;
 alter table public.estoque enable row level security;
 alter table public.horarios enable row level security;
@@ -1542,6 +1562,19 @@ create policy dias_especiais_alteracao on public.dias_especiais as PERMISSIVE fo
   with check ((salon_id = get_salon_id_proprio()));
 
 create policy dias_especiais_exclusao on public.dias_especiais as PERMISSIVE for DELETE to authenticated
+  using ((salon_id = get_salon_id_proprio()));
+
+create policy debitos_leitura on public.debitos as PERMISSIVE for SELECT to authenticated
+  using ((salon_id = get_salon_id()));
+
+create policy debitos_insercao on public.debitos as PERMISSIVE for INSERT to authenticated
+  with check ((salon_id = get_salon_id_proprio()));
+
+create policy debitos_alteracao on public.debitos as PERMISSIVE for UPDATE to authenticated
+  using ((salon_id = get_salon_id_proprio()))
+  with check ((salon_id = get_salon_id_proprio()));
+
+create policy debitos_exclusao on public.debitos as PERMISSIVE for DELETE to authenticated
   using ((salon_id = get_salon_id_proprio()));
 
 create policy estoque_leitura on public.estoque as PERMISSIVE for SELECT to authenticated

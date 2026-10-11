@@ -26,6 +26,7 @@ import AgendamentosPage from './pages/agendamentos/AgendamentosPage'
 import ClientesPage from './pages/clientes/ClientesPage'
 import EstoquePage from './pages/estoque/EstoquePage'
 import FinanceiroPage from './pages/financeiro/FinanceiroPage'
+import DebitosPage from './pages/debitos/DebitosPage'
 import ConfiguracoesPage from './pages/configuracoes/ConfiguracoesPage'
 
 import ClienteAreaPage from './pages/cliente/ClienteAreaPage'
@@ -132,6 +133,7 @@ export default function App() {
         <Route path="clientes" element={<ClientesPage />} />
         <Route path="estoque" element={<ModuloRoute modulo="estoque"><EstoquePage /></ModuloRoute>} />
         <Route path="financeiro" element={<FinanceiroPage />} />
+        <Route path="debitos" element={<DebitosPage />} />
         <Route path="configuracoes" element={<ConfiguracoesPage />} />
       </Route>
 
