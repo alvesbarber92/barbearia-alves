@@ -111,7 +111,10 @@ export default function FinanceiroPage() {
   useEffect(() => {
     if (!salon?.id) return
     const desde90 = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString()
-    const desde30 = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
+    const hoje = new Date()
+    const inicioFechado = new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1)
+    const fimFechado    = new Date(hoje.getFullYear(), hoje.getMonth(), 1)
+    const nomeFechado   = inicioFechado.toLocaleDateString('pt-BR', { month: 'long' })
 
     supabase
       .from('agendamentos')
@@ -135,11 +138,14 @@ export default function FinanceiroPage() {
           : '—'
 
         const receita90 = ags.reduce((s, a) => s + (a.valor || 0), 0)
-        const receita30 = ags
-          .filter(a => a.data_hora >= desde30)
+        const receitaFechado = ags
+          .filter(a => {
+            const d = new Date(a.data_hora)
+            return d >= inicioFechado && d < fimFechado
+          })
           .reduce((s, a) => s + (a.valor || 0), 0)
 
-        setKpis({ melhorDia, servicoTop, receita30, receita90 })
+        setKpis({ melhorDia, servicoTop, receitaFechado, nomeFechado, receita90 })
         setLoadingKpis(false)
       })
   }, [salon?.id])
@@ -332,7 +338,7 @@ export default function FinanceiroPage() {
             {[
               { label: 'Melhor dia da semana',   value: kpis.melhorDia,           sub: 'últimos 90 dias' },
               { label: 'Serviço mais realizado', value: kpis.servicoTop,          sub: 'últimos 90 dias' },
-              { label: 'Receita 30 dias',        value: brlCompacto(kpis.receita30), sub: 'últimos 30 dias' },
+              { label: `Receita de ${kpis.nomeFechado}`, value: brlCompacto(kpis.receitaFechado), sub: 'mês fechado' },
               { label: 'Receita 90 dias',        value: brlCompacto(kpis.receita90), sub: 'últimos 90 dias' },
             ].map(({ label, value, sub }) => (
               <div key={label} className="rounded-superficie p-4 bg-elevado min-w-0">
