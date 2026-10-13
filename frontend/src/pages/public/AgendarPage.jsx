@@ -3,7 +3,7 @@ import { Link, useLocation, useParams } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { lerSalaoGuardado, guardarSalao } from '../../lib/salaoGuardado'
 import toast from 'react-hot-toast'
-import { Check, Mail, LogOut, Calendar, CalendarDays, ClipboardList, ArrowLeft } from 'lucide-react'
+import { Check, Mail, LogOut, Calendar, CalendarDays, ClipboardList, ArrowLeft, Clock } from 'lucide-react'
 import StatusBadge from '../../components/ui/StatusBadge'
 import DataRail from '../../components/ui/DataRail'
 import Monogram from '../../components/ui/Monogram'
@@ -427,6 +427,21 @@ export default function AgendarPage() {
                 <span className="font-semibold text-cal-2">Valor</span>
                 <span className="num font-semibold">{brlCompacto(servico?.valor)}</span>
             </div>
+          </div>
+
+          <div className="rounded-superficie border border-warn bg-warn-fundo p-4 space-y-2" role="note">
+            <p className="flex items-center gap-2 text-apoio font-semibold text-warn">
+              <Clock size={16} aria-hidden="true" /> Prezado cliente
+            </p>
+            <p className="text-apoio leading-relaxed text-cal">
+              Nossos atendimentos são com horário marcado para evitar filas e atrasos e pensando
+              principalmente em um atendimento sem correria e com a atenção que você merece.
+              Solicitamos a pontualidade no seu horário agendado.
+            </p>
+            <p className="text-apoio leading-relaxed font-semibold text-cal">
+              Em caso de atrasos superiores a 10 minutos, precisaremos reagendar seu horário.
+            </p>
+            <p className="text-apoio text-cal-2">Agradecemos a compreensão!</p>
           </div>
 
           <div className="space-y-2">
