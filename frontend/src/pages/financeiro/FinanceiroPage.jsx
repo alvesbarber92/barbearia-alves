@@ -135,12 +135,9 @@ export default function FinanceiroPage() {
 
   useEffect(() => {
     if (!salon?.id) return
-    const desde90 = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString()
+    const desde90 = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000)
     const desde30 = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
     const hoje = new Date()
-    const inicioFechado = new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1)
-    const fimFechado    = new Date(hoje.getFullYear(), hoje.getMonth(), 1)
-    const nomeFechado   = inicioFechado.toLocaleDateString('pt-BR', { month: 'long' })
 
     Promise.all([
       supabase
@@ -148,16 +145,17 @@ export default function FinanceiroPage() {
         .select('servico, valor, data_hora')
         .eq('salon_id', salon.id)
         .eq('status', 'confirmado')
-        .gte('data_hora', desde90)
+        .gte('data_hora', desde90.toISOString())
         .lte('data_hora', hoje.toISOString()),
       supabase
         .from('debitos')
-        .select('valor')
+        .select('valor, pago_em')
         .eq('salon_id', salon.id)
-        .gte('pago_em', desde30.toISOString())
+        .gte('pago_em', desde90.toISOString())
         .lte('pago_em', hoje.toISOString()),
-    ]).then(([{ data }, { data: debitos30 }]) => {
+    ]).then(([{ data }, { data: debitosData }]) => {
       const ags = data || []
+      const debitos = debitosData || []
 
       const receitaPorDia = Array(7).fill(0)
       ags.forEach(a => { receitaPorDia[new Date(a.data_hora).getDay()] += (a.valor || 0) })
@@ -170,17 +168,11 @@ export default function FinanceiroPage() {
         ? Object.entries(contagem).sort((a, b) => b[1] - a[1])[0][0]
         : '—'
 
-      const realizado30 =
-        ags.filter(a => new Date(a.data_hora) >= desde30).reduce((s, a) => s + Number(a.valor || 0), 0) +
-        (debitos30 || []).reduce((s, d) => s + Number(d.valor || 0), 0)
-      const receitaFechado = ags
-        .filter(a => {
-          const d = new Date(a.data_hora)
-          return d >= inicioFechado && d < fimFechado
-        })
-        .reduce((s, a) => s + (a.valor || 0), 0)
+      const realizadoDesde = (desde) =>
+        ags.filter(a => new Date(a.data_hora) >= desde).reduce((s, a) => s + Number(a.valor || 0), 0) +
+        debitos.filter(d => new Date(d.pago_em) >= desde).reduce((s, d) => s + Number(d.valor || 0), 0)
 
-      setKpis({ melhorDia, servicoTop, receitaFechado, nomeFechado, realizado30 })
+      setKpis({ melhorDia, servicoTop, realizado30: realizadoDesde(desde30), receita90: realizadoDesde(desde90) })
       setLoadingKpis(false)
     })
   }, [salon?.id])
@@ -385,8 +377,8 @@ export default function FinanceiroPage() {
             {[
               { label: 'Melhor dia da semana',   value: kpis.melhorDia,           sub: 'últimos 90 dias' },
               { label: 'Serviço mais realizado', value: kpis.servicoTop,          sub: 'últimos 90 dias' },
-              { label: `Receita de ${kpis.nomeFechado}`, value: brlCompacto(kpis.receitaFechado), sub: 'mês fechado' },
-              { label: 'Realizado em 30 dias',   value: brlCompacto(kpis.realizado30), sub: 'últimos 30 dias, com débitos recebidos' },
+              { label: 'Realizado em 30 dias',   value: brlCompacto(kpis.realizado30), sub: 'últimos 30 dias' },
+              { label: 'Receita 90 dias',        value: brlCompacto(kpis.receita90),   sub: 'últimos 90 dias' },
             ].map(({ label, value, sub }) => (
               <div key={label} className="rounded-superficie p-4 bg-elevado min-w-0">
                 <p className="text-xs font-medium mb-1 text-cal-3">{label}</p>
