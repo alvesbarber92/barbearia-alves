@@ -90,7 +90,10 @@ export default function FinanceiroPage() {
       setAtendimentosHoje(resHoje.data || [])
       const agoraTs = new Date()
       const doMes = resMes.data || []
-      setReceitaMesAtual(doMes.reduce((s, a) => s + Number(a.valor || 0), 0))
+      setReceitaMesAtual(
+        doMes.filter(a => new Date(a.data_hora) <= agoraTs)
+             .reduce((s, a) => s + Number(a.valor || 0), 0)
+      )
       setPrevistoMesAtual(
         doMes.filter(a => new Date(a.data_hora) > agoraTs)
              .reduce((s, a) => s + Number(a.valor || 0), 0)
@@ -236,11 +239,8 @@ export default function FinanceiroPage() {
           sub={previstoHoje > 0 ? `+ ${brlCompacto(previstoHoje)} previsto` : 'atendimentos hoje'} />
         <StatCard icon={Calendar}   label="Agendamentos hoje" value={qtdHoje}                    sub="já realizados" />
         <StatCard icon={TrendingUp} label="Ticket médio"      value={brlCompacto(ticketHoje)}      sub="por atendimento" />
-        <StatCard icon={DollarSign} label="Total do mês"      value={brlCompacto(receitaMesAtual + debitosMesAtual)}
-          sub={[
-            previstoMesAtual > 0 && `inclui ${brlCompacto(previstoMesAtual)} a realizar`,
-            debitosMesAtual > 0 && `${brlCompacto(debitosMesAtual)} de débitos`,
-          ].filter(Boolean).join(' · ') || nomeMes(agora.getFullYear(), agora.getMonth())} />
+        <StatCard icon={DollarSign} label="Realizado no mês"  value={brlCompacto(receitaMesAtual + debitosMesAtual)}
+          sub={previstoMesAtual > 0 ? `+ ${brlCompacto(previstoMesAtual)} previsto` : 'nada previsto para o resto do mês'} />
       </div>
 
       <div className="card">
