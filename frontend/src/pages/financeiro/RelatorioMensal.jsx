@@ -238,7 +238,7 @@ export default function RelatorioMensal({ salonId, salonNome, year, month, onClo
             <>
               <p className="text-base leading-relaxed">{frase()}</p>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+              <div className="grid grid-cols-2 gap-x-4 gap-y-5 sm:grid-cols-3 sm:gap-5 print:grid-cols-3">
                 <Indicador label="Faturamento" valor={brl(relatorio.atual.faturamento)}>
                   <Comparacao atual={relatorio.atual.faturamento} anterior={relatorio.anterior.faturamento}
                     formatar={brl} nomeAnterior={mesAnterior} />
