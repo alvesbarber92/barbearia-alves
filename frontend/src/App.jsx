@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
-import { Routes, Route, Navigate, useParams } from 'react-router-dom'
+import { Routes, Route, Navigate, useParams, useLocation } from 'react-router-dom'
 import { useAuth } from './context/useAuth'
-import { supabase } from './lib/supabase'
+import { supabase, hashInicial } from './lib/supabase'
 import { destinoAposLogin } from './lib/destinoAposLogin'
 
 import LoginPage from './pages/auth/LoginPage'
@@ -86,6 +86,16 @@ function PrivateRoute({ children, adminOnly = false }) {
   return children
 }
 
+const paramsHash = new URLSearchParams(hashInicial.slice(1))
+const veioDeRecuperacao = paramsHash.get('type') === 'recovery' || paramsHash.has('error_code')
+
+function DesvioRecuperacao() {
+  const { pathname } = useLocation()
+  const [pendente, setPendente] = useState(veioDeRecuperacao)
+  if (pendente && pathname === '/redefinir-senha') setPendente(false)
+  return pendente && pathname !== '/redefinir-senha' ? <Navigate to="/redefinir-senha" replace /> : null
+}
+
 function Inicio() {
   const { session, loading } = useAuth()
   const [destino, setDestino] = useState(null)
@@ -106,40 +116,43 @@ function Inicio() {
 
 export default function App() {
   return (
-    <Routes>
-      <Route path="/" element={<Inicio />} />
-      <Route path="/login" element={<LoginPage />} />
-      <Route path="/cadastro-cliente" element={<CadastroClientePage />} />
+    <>
+      <DesvioRecuperacao />
+      <Routes>
+        <Route path="/" element={<Inicio />} />
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/cadastro-cliente" element={<CadastroClientePage />} />
 
-      <Route path="/esqueci-senha" element={<EsqueciSenhaPage />} />
-      <Route path="/redefinir-senha" element={<RedefinirSenhaPage />} />
+        <Route path="/esqueci-senha" element={<EsqueciSenhaPage />} />
+        <Route path="/redefinir-senha" element={<RedefinirSenhaPage />} />
 
-      <Route path="/quero-meu-salao" element={<QueroMeuSalaoPage />} />
+        <Route path="/quero-meu-salao" element={<QueroMeuSalaoPage />} />
 
-      <Route path="/termos" element={<TermosPage />} />
-      <Route path="/privacidade" element={<PrivacidadePage />} />
+        <Route path="/termos" element={<TermosPage />} />
+        <Route path="/privacidade" element={<PrivacidadePage />} />
 
-      <Route path="/admin" element={<PlataformaAdminRoute><AdminPage /></PlataformaAdminRoute>} />
+        <Route path="/admin" element={<PlataformaAdminRoute><AdminPage /></PlataformaAdminRoute>} />
 
-      <Route path="/onboarding" element={<PrivateRoute adminOnly><SalaoAtivoRoute><OnboardingPage /></SalaoAtivoRoute></PrivateRoute>} />
+        <Route path="/onboarding" element={<PrivateRoute adminOnly><SalaoAtivoRoute><OnboardingPage /></SalaoAtivoRoute></PrivateRoute>} />
 
-      <Route path="/:slug" element={<SalonHome />} />
+        <Route path="/:slug" element={<SalonHome />} />
 
-      <Route path="/:slug" element={<PrivateRoute adminOnly><SalaoAtivoRoute><DashboardLayout /></SalaoAtivoRoute></PrivateRoute>}>
-        <Route path="dashboard" element={<DashboardHome />} />
-        <Route path="agendamentos" element={<AgendamentosPage />} />
-        <Route path="clientes" element={<ClientesPage />} />
-        <Route path="estoque" element={<ModuloRoute modulo="estoque"><EstoquePage /></ModuloRoute>} />
-        <Route path="financeiro" element={<FinanceiroPage />} />
-        <Route path="debitos" element={<DebitosPage />} />
-        <Route path="configuracoes" element={<ConfiguracoesPage />} />
-      </Route>
+        <Route path="/:slug" element={<PrivateRoute adminOnly><SalaoAtivoRoute><DashboardLayout /></SalaoAtivoRoute></PrivateRoute>}>
+          <Route path="dashboard" element={<DashboardHome />} />
+          <Route path="agendamentos" element={<AgendamentosPage />} />
+          <Route path="clientes" element={<ClientesPage />} />
+          <Route path="estoque" element={<ModuloRoute modulo="estoque"><EstoquePage /></ModuloRoute>} />
+          <Route path="financeiro" element={<FinanceiroPage />} />
+          <Route path="debitos" element={<DebitosPage />} />
+          <Route path="configuracoes" element={<ConfiguracoesPage />} />
+        </Route>
 
-      <Route path="/minha-conta" element={<PrivateRoute><ClienteAreaPage /></PrivateRoute>} />
+        <Route path="/minha-conta" element={<PrivateRoute><ClienteAreaPage /></PrivateRoute>} />
 
-      <Route path="/:slug/agendar" element={<AgendarPage />} />
+        <Route path="/:slug/agendar" element={<AgendarPage />} />
 
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </>
   )
 }
