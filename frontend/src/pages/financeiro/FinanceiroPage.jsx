@@ -1,11 +1,12 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useAuth } from '../../context/useAuth'
 import { supabase } from '../../lib/supabase'
 import { SkeletonCard } from '../../components/ui/Skeleton'
 import StatCard, { MiniStat } from '../../components/ui/StatCard'
 import PageHeader from '../../components/ui/PageHeader'
 import { brlCompacto } from '../../lib/agenda'
-import { DollarSign, Calendar, TrendingUp, ChevronLeft, ChevronRight, Star } from 'lucide-react'
+import { DollarSign, Calendar, TrendingUp, ChevronLeft, ChevronRight, Star, FileText } from 'lucide-react'
+import RelatorioMensal from './RelatorioMensal'
 
 const DIAS_SEMANA = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado']
 
@@ -49,6 +50,9 @@ export default function FinanceiroPage() {
   const loadingMes = !salon?.id || dadosMes.chave !== chaveMes
   const atendimentosMes = dadosMes.lista
   const debitosMes = dadosMes.debitos
+
+  const [relatorioAberto, setRelatorioAberto] = useState(false)
+  const fecharRelatorio = useCallback(() => setRelatorioAberto(false), [])
 
   const [loadingKpis, setLoadingKpis] = useState(true)
   const [kpis, setKpis] = useState(null)
@@ -281,8 +285,22 @@ export default function FinanceiroPage() {
             <button onClick={nextMes} className="btn-secondary px-2">
               <ChevronRight size={15} />
             </button>
+            <button onClick={() => setRelatorioAberto(true)} className="btn-secondary ml-1 gap-1.5">
+              <FileText size={15} />
+              Relatório
+            </button>
           </div>
         </div>
+
+        {relatorioAberto && (
+          <RelatorioMensal
+            salonId={salon.id}
+            salonNome={salon.nome || 'Alves BarberShop'}
+            year={mesSel.year}
+            month={mesSel.month}
+            onClose={fecharRelatorio}
+          />
+        )}
 
         {loadingMes ? (
           <div className="grid grid-cols-3 gap-3">

@@ -383,3 +383,40 @@
 
   .anim-pop { animation: subida 0.22s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
 }
+
+@media print {
+  @page { margin: 14mm; }
+
+  html, body {
+    background: #fff !important;
+    overflow: visible !important;
+  }
+
+  body::after { display: none; }
+
+  body > :not(.impressao) { display: none !important; }
+
+  .impressao {
+    position: static !important;
+    display: block !important;
+    padding: 0 !important;
+    background: none !important;
+  }
+
+  .impressao-folha {
+    max-width: none !important;
+    max-height: none !important;
+    overflow: visible !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+  }
+
+  .impressao-folha > div { padding: 0 !important; }
+
+  .nao-imprimir { display: none !important; }
+
+  .impressao * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}
