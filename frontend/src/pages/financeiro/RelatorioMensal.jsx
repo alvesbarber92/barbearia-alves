@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Printer, X } from 'lucide-react'
 import CamadaModal from '../../components/ui/CamadaModal'
 import { supabase } from '../../lib/supabase'
-import { brl } from '../../lib/agenda'
+import { brl, lucroDaVenda } from '../../lib/agenda'
 
 const DIAS_SEMANA = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado']
 
@@ -19,13 +19,16 @@ function nomeDoMes(year, month) {
   return new Date(year, month, 1).toLocaleDateString('pt-BR', { month: 'long' })
 }
 
-function resumir({ atend, debitos }) {
+function resumir({ atend, debitos, vendas }) {
   const receitaAtend = atend.reduce((s, a) => s + Number(a.valor || 0), 0)
   const recebidoDebitos = debitos.reduce((s, d) => s + Number(d.valor || 0), 0)
+  const lucroVendas = vendas.reduce((s, v) => s + lucroDaVenda(v), 0)
   const atendimentos = atend.length
   return {
-    faturamento: receitaAtend + recebidoDebitos,
+    faturamento: receitaAtend + recebidoDebitos + lucroVendas,
     recebidoDebitos,
+    lucroVendas,
+    teveVendas: vendas.length > 0,
     atendimentos,
     media: atendimentos ? receitaAtend / atendimentos : 0,
   }
@@ -99,9 +102,15 @@ export default function RelatorioMensal({ salonId, salonNome, year, month, onClo
         .eq('salon_id', salonId)
         .gte('pago_em', inicioAnterior.toISOString())
         .lt('pago_em', fim.toISOString()),
-    ]).then(([resAg, resDeb]) => {
+      supabase
+        .from('vendas')
+        .select('valor_total, custo_total, data_venda')
+        .eq('salon_id', salonId)
+        .gte('data_venda', inicioAnterior.toISOString())
+        .lt('data_venda', fim.toISOString()),
+    ]).then(([resAg, resDeb, resVen]) => {
       if (cancelado) return
-      if (resAg.error || resDeb.error) { setDados({ erro: true }); return }
+      if (resAg.error || resDeb.error || resVen.error) { setDados({ erro: true }); return }
       const entre = (lista, campo, de, ate) => lista.filter(x => {
         const d = new Date(x[campo])
         return d >= de && d < ate
@@ -110,10 +119,12 @@ export default function RelatorioMensal({ salonId, salonNome, year, month, onClo
         atual: {
           atend: entre(resAg.data || [], 'data_hora', inicio, fim),
           debitos: entre(resDeb.data || [], 'pago_em', inicio, fim),
+          vendas: entre(resVen.data || [], 'data_venda', inicio, fim),
         },
         anterior: {
           atend: entre(resAg.data || [], 'data_hora', inicioAnterior, inicio),
           debitos: entre(resDeb.data || [], 'pago_em', inicioAnterior, inicio),
+          vendas: entre(resVen.data || [], 'data_venda', inicioAnterior, inicio),
         },
         emitidoEm: agora,
       })
@@ -152,7 +163,7 @@ export default function RelatorioMensal({ salonId, salonNome, year, month, onClo
   const mes = nomeDoMes(year, month)
   const mesAnterior = nomeDoMes(year, month - 1)
   const mesAno = new Date(year, month, 1).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
-  const vazio = relatorio && relatorio.atual.atendimentos === 0 && relatorio.atual.recebidoDebitos === 0
+  const vazio = relatorio && relatorio.atual.atendimentos === 0 && relatorio.atual.recebidoDebitos === 0 && !relatorio.atual.teveVendas
 
   function imprimir() {
     const tituloAntes = document.title
@@ -234,6 +245,11 @@ export default function RelatorioMensal({ salonId, salonNome, year, month, onClo
                   {relatorio.atual.recebidoDebitos > 0 && (
                     <p className="text-xs text-[#6b6660] tabular-nums">
                       inclui {brl(relatorio.atual.recebidoDebitos)} de débitos recebidos
+                    </p>
+                  )}
+                  {relatorio.atual.teveVendas && (
+                    <p className="text-xs text-[#6b6660] tabular-nums">
+                      inclui {brl(relatorio.atual.lucroVendas)} de lucro em vendas
                     </p>
                   )}
                 </Indicador>

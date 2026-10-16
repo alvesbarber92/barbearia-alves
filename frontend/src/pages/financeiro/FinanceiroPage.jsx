@@ -4,7 +4,7 @@ import { supabase } from '../../lib/supabase'
 import { SkeletonCard } from '../../components/ui/Skeleton'
 import StatCard, { MiniStat } from '../../components/ui/StatCard'
 import PageHeader from '../../components/ui/PageHeader'
-import { brlCompacto } from '../../lib/agenda'
+import { brlCompacto, lucroDaVenda } from '../../lib/agenda'
 import { DollarSign, Calendar, TrendingUp, ChevronLeft, ChevronRight, Star, FileText } from 'lucide-react'
 import RelatorioMensal from './RelatorioMensal'
 
@@ -42,14 +42,16 @@ export default function FinanceiroPage() {
   const [receitaMesAtual, setReceitaMesAtual] = useState(0)
   const [previstoMesAtual, setPrevistoMesAtual] = useState(0)
   const [debitosMesAtual, setDebitosMesAtual] = useState(0)
+  const [lucroVendasMesAtual, setLucroVendasMesAtual] = useState(0)
 
   const agora = new Date()
   const [mesSel, setMesSel] = useState({ year: agora.getFullYear(), month: agora.getMonth() })
-  const [dadosMes, setDadosMes] = useState({ chave: null, lista: [], debitos: [] })
+  const [dadosMes, setDadosMes] = useState({ chave: null, lista: [], debitos: [], vendas: [] })
   const chaveMes = `${salon?.id ?? ""}:${mesSel.year}-${mesSel.month}`
   const loadingMes = !salon?.id || dadosMes.chave !== chaveMes
   const atendimentosMes = dadosMes.lista
   const debitosMes = dadosMes.debitos
+  const vendasMes = dadosMes.vendas
 
   const [relatorioAberto, setRelatorioAberto] = useState(false)
   const fecharRelatorio = useCallback(() => setRelatorioAberto(false), [])
@@ -86,7 +88,13 @@ export default function FinanceiroPage() {
         .eq('salon_id', salon.id)
         .gte('pago_em', inicioMes(ano, mes))
         .lt('pago_em', inicioMesSeguinte(ano, mes)),
-    ]).then(([resHoje, resMes, resDebitos]) => {
+      supabase
+        .from('vendas')
+        .select('valor_total, custo_total')
+        .eq('salon_id', salon.id)
+        .gte('data_venda', inicioMes(ano, mes))
+        .lt('data_venda', inicioMesSeguinte(ano, mes)),
+    ]).then(([resHoje, resMes, resDebitos, resVendas]) => {
       setAtendimentosHoje(resHoje.data || [])
       const agoraTs = new Date()
       const doMes = resMes.data || []
@@ -99,6 +107,7 @@ export default function FinanceiroPage() {
              .reduce((s, a) => s + Number(a.valor || 0), 0)
       )
       setDebitosMesAtual((resDebitos.data || []).reduce((s, d) => s + Number(d.valor || 0), 0))
+      setLucroVendasMesAtual((resVendas.data || []).reduce((s, v) => s + lucroDaVenda(v), 0))
       setLoadingHoje(false)
     })
   }, [salon?.id])
@@ -124,9 +133,20 @@ export default function FinanceiroPage() {
         .eq('salon_id', salonId)
         .gte('pago_em', inicioMes(year, month))
         .lt('pago_em', inicioMesSeguinte(year, month)),
-    ]).then(([resAgend, resDebitos]) => {
+      supabase
+        .from('vendas')
+        .select('id, quantidade, valor_total, custo_total, data_venda, estoque(nome), clientes(nome)')
+        .eq('salon_id', salonId)
+        .gte('data_venda', inicioMes(year, month))
+        .lt('data_venda', inicioMesSeguinte(year, month)),
+    ]).then(([resAgend, resDebitos, resVendas]) => {
       if (!cancelado) {
-        setDadosMes({ chave: `${salonId}:${year}-${month}`, lista: resAgend.data || [], debitos: resDebitos.data || [] })
+        setDadosMes({
+          chave: `${salonId}:${year}-${month}`,
+          lista: resAgend.data || [],
+          debitos: resDebitos.data || [],
+          vendas: resVendas.data || [],
+        })
       }
     })
 
@@ -153,9 +173,16 @@ export default function FinanceiroPage() {
         .eq('salon_id', salon.id)
         .gte('pago_em', desde90.toISOString())
         .lte('pago_em', hoje.toISOString()),
-    ]).then(([{ data }, { data: debitosData }]) => {
+      supabase
+        .from('vendas')
+        .select('valor_total, custo_total, data_venda')
+        .eq('salon_id', salon.id)
+        .gte('data_venda', desde90.toISOString())
+        .lte('data_venda', hoje.toISOString()),
+    ]).then(([{ data }, { data: debitosData }, { data: vendasData }]) => {
       const ags = data || []
       const debitos = debitosData || []
+      const vendas = vendasData || []
 
       const receitaPorDia = Array(7).fill(0)
       ags.forEach(a => { receitaPorDia[new Date(a.data_hora).getDay()] += (a.valor || 0) })
@@ -170,7 +197,8 @@ export default function FinanceiroPage() {
 
       const realizadoDesde = (desde) =>
         ags.filter(a => new Date(a.data_hora) >= desde).reduce((s, a) => s + Number(a.valor || 0), 0) +
-        debitos.filter(d => new Date(d.pago_em) >= desde).reduce((s, d) => s + Number(d.valor || 0), 0)
+        debitos.filter(d => new Date(d.pago_em) >= desde).reduce((s, d) => s + Number(d.valor || 0), 0) +
+        vendas.filter(v => new Date(v.data_venda) >= desde).reduce((s, v) => s + lucroDaVenda(v), 0)
 
       setKpis({ melhorDia, servicoTop, realizado30: realizadoDesde(desde30), receita90: realizadoDesde(desde90) })
       setLoadingKpis(false)
@@ -191,7 +219,12 @@ export default function FinanceiroPage() {
   const realizadosMes = atendimentosMes.filter(a => a.status === 'confirmado' && new Date(a.data_hora) <= agoraMes)
   const receitaAtendMesSel = realizadosMes.reduce((s, a) => s + Number(a.valor || 0), 0)
   const debitosRecebidosMesSel = debitosMes.reduce((s, d) => s + Number(d.valor || 0), 0)
-  const receitaMesSel = receitaAtendMesSel + debitosRecebidosMesSel
+  const lucroVendasMesSel = vendasMes.reduce((s, v) => s + lucroDaVenda(v), 0)
+  const receitaMesSel = receitaAtendMesSel + debitosRecebidosMesSel + lucroVendasMesSel
+  const extrasMesSel = [
+    debitosRecebidosMesSel > 0 && `${brlCompacto(debitosRecebidosMesSel)} de débitos recebidos`,
+    vendasMes.length > 0 && `${brlCompacto(lucroVendasMesSel)} de lucro em vendas`,
+  ].filter(Boolean)
   const qtdMesSel = realizadosMes.length
   const ticketMesSel = qtdMesSel > 0 ? receitaAtendMesSel / qtdMesSel : 0
   const linhasMes = [
@@ -201,6 +234,11 @@ export default function FinanceiroPage() {
     ...debitosMes.map(d => ({
       id: `d-${d.id}`, quando: d.pago_em, nome: d.nome,
       servico: d.descricao ? `Débito recebido · ${d.descricao}` : 'Débito recebido', valor: d.valor, debito: true,
+    })),
+    ...vendasMes.map(v => ({
+      id: `v-${v.id}`, quando: v.data_venda, nome: v.clientes?.nome,
+      servico: `Lucro da venda · ${v.estoque?.nome || 'Produto'}${v.quantidade > 1 ? ` (${v.quantidade} un.)` : ''}`,
+      valor: lucroDaVenda(v), debito: true,
     })),
   ].sort((a, b) => new Date(b.quando) - new Date(a.quando))
 
@@ -241,7 +279,7 @@ export default function FinanceiroPage() {
           sub={previstoHoje > 0 ? `+ ${brlCompacto(previstoHoje)} previsto` : 'atendimentos hoje'} />
         <StatCard icon={Calendar}   label="Agendamentos hoje" value={qtdHoje}                    sub="já realizados" />
         <StatCard icon={TrendingUp} label="Ticket médio"      value={brlCompacto(ticketHoje)}      sub="por atendimento" />
-        <StatCard icon={DollarSign} label="Realizado no mês"  value={brlCompacto(receitaMesAtual + debitosMesAtual)}
+        <StatCard icon={DollarSign} label="Realizado no mês"  value={brlCompacto(receitaMesAtual + debitosMesAtual + lucroVendasMesAtual)}
           sub={previstoMesAtual > 0 ? `+ ${brlCompacto(previstoMesAtual)} previsto` : 'nada previsto para o resto do mês'} />
       </div>
 
@@ -312,7 +350,7 @@ export default function FinanceiroPage() {
           <>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <MiniStat label="Total do mês" value={brlCompacto(receitaMesSel)}
-                sub={debitosRecebidosMesSel > 0 ? `inclui ${brlCompacto(debitosRecebidosMesSel)} de débitos recebidos` : 'já realizados'} />
+                sub={extrasMesSel.length ? `inclui ${extrasMesSel.join(' e ')}` : 'já realizados'} />
               <MiniStat label="Atendimentos" value={qtdMesSel} />
               <MiniStat label="Ticket médio" value={brlCompacto(ticketMesSel)} />
             </div>
@@ -377,8 +415,8 @@ export default function FinanceiroPage() {
             {[
               { label: 'Melhor dia da semana',   value: kpis.melhorDia,           sub: 'últimos 90 dias' },
               { label: 'Serviço mais realizado', value: kpis.servicoTop,          sub: 'últimos 90 dias' },
-              { label: 'Realizado em 30 dias',   value: brlCompacto(kpis.realizado30), sub: 'últimos 30 dias' },
-              { label: 'Receita 90 dias',        value: brlCompacto(kpis.receita90),   sub: 'últimos 90 dias' },
+              { label: 'Realizado em 30 dias',   value: brlCompacto(kpis.realizado30), sub: 'últimos 30 dias, com débitos e vendas' },
+              { label: 'Receita 90 dias',        value: brlCompacto(kpis.receita90),   sub: 'últimos 90 dias, com débitos e vendas' },
             ].map(({ label, value, sub }) => (
               <div key={label} className="rounded-superficie p-4 bg-elevado min-w-0">
                 <p className="text-xs font-medium mb-1 text-cal-3">{label}</p>

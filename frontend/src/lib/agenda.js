@@ -39,6 +39,10 @@ export function formatDuracao(min) {
   return m ? `${h}h${m}` : `${h}h`
 }
 
+export function lucroDaVenda(v) {
+  return (Number(v.valor_total) || 0) - (Number(v.custo_total) || 0)
+}
+
 export function brl(v) {
   const n = Number(v || 0)
   const redondo = Math.round(n * 100) % 100 === 0
