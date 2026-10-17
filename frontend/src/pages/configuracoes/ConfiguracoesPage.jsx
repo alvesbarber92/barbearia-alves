@@ -452,9 +452,16 @@ export default function ConfiguracoesPage() {
   })
 
   const contagensCal = Object.fromEntries(Object.entries(agendPorDia).map(([k, v]) => [k, v.length]))
-  const estadosCal = Object.fromEntries(
-    Object.values(especiais).map(e => [e.data, e.fechado ? 'fechado' : 'especial'])
-  )
+  const estadosCal = {}
+  const inicioCal = new Date(mesCal.ano, mesCal.mes, 1)
+  inicioCal.setDate(inicioCal.getDate() - inicioCal.getDay())
+  for (let i = 0; i < 42; i++) {
+    const d = new Date(inicioCal)
+    d.setDate(d.getDate() + i)
+    const h = horarios.find(x => x.dia_semana === d.getDay()) ?? horarioPadrao(d.getDay())
+    if (!h.ativo) estadosCal[chaveDia(d)] = 'fechado'
+  }
+  for (const e of Object.values(especiais)) estadosCal[e.data] = e.fechado ? 'fechado' : 'especial'
 
   async function salvarDiasEspeciais() {
     if (!salon?.id || selecao.length === 0) return

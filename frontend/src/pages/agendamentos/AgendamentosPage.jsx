@@ -257,9 +257,19 @@ export default function AgendamentosPage() {
     return extras.length ? [...lista, ...extras] : lista
   }
 
-  const estadosCal = useMemo(() => Object.fromEntries(
-    Object.values(especiais).map(e => [e.data, e.fechado ? 'fechado' : 'especial'])
-  ), [especiais])
+  const estadosCal = useMemo(() => {
+    const mapa = {}
+    const inicio = new Date(mesCal.ano, mesCal.mes, 1)
+    inicio.setDate(inicio.getDate() - inicio.getDay())
+    for (let i = 0; i < 42; i++) {
+      const d = new Date(inicio)
+      d.setDate(d.getDate() + i)
+      const h = horarios[d.getDay()] ?? horarioPadrao(d.getDay())
+      if (!h.ativo) mapa[chaveDia(d)] = 'fechado'
+    }
+    for (const e of Object.values(especiais)) mapa[e.data] = e.fechado ? 'fechado' : 'especial'
+    return mapa
+  }, [especiais, horarios, mesCal])
 
   const agendDia    = agendamentos.filter(a => isSameDay(a.data_hora, diaAtivo) && a.status !== 'cancelado')
   const hoje = new Date(); hoje.setHours(0, 0, 0, 0)
