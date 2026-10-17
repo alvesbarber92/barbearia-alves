@@ -11,7 +11,10 @@ import CalendarioMes from '../../components/ui/CalendarioMes'
 import FundoFoto from '../../components/ui/FundoFoto'
 import CampoSenha from '../../components/ui/CampoSenha'
 import { AvisoLegal } from '../../components/AvisoLegal'
-import { brlCompacto, chaveDia, horarioPadrao, ultimoDiaAgendavelData } from '../../lib/agenda'
+import {
+  brlCompacto, chaveDia, horarioPadrao, ultimoDiaAgendavelData,
+  diaNaBarbearia, instanteNaBarbearia, horaNaBarbearia, formatHoraBarbearia, formatDataBarbearia,
+} from '../../lib/agenda'
 import { useAccent } from '../../hooks/useAccent'
 import { useConfirmacao } from '../../hooks/useConfirmacao'
 import { mascararTelefone, telefoneValido, MSG_TELEFONE_INVALIDO, propsCampoTelefone } from '../../lib/telefone'
@@ -48,12 +51,7 @@ function mesDe(d) {
   return { ano: d.getFullYear(), mes: d.getMonth() }
 }
 
-function horaParaDate(dia, hhmm) {
-  const [h, m] = hhmm.slice(0, 5).split(':').map(Number)
-  const d = new Date(dia)
-  d.setHours(h, m, 0, 0)
-  return d
-}
+const horaParaDate = instanteNaBarbearia
 
 function gerarSlots(dia, horario) {
   const inicio = horaParaDate(dia, horario.abertura)
@@ -63,9 +61,7 @@ function gerarSlots(dia, horario) {
   return slots
 }
 
-function formatHora(date) {
-  return new Date(date).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
-}
+const formatHora = formatHoraBarbearia
 
 function isSameDay(a, b) {
   const da = new Date(a), db = new Date(b)
@@ -82,7 +78,7 @@ function formatDuracao(min) {
 
 function agruparPorPeriodo(slots) {
   return PERIODOS
-    .map(p => ({ label: p.label, slots: slots.filter(s => s.getHours() >= p.de && s.getHours() < p.ate) }))
+    .map(p => ({ label: p.label, slots: slots.filter(s => horaNaBarbearia(s) >= p.de && horaNaBarbearia(s) < p.ate) }))
     .filter(g => g.slots.length > 0)
 }
 
@@ -140,9 +136,9 @@ export default function AgendarPage() {
   const [versaoExpediente, setVersaoExpediente] = useState(0)
   const [etapa,        setEtapa]        = useState('servico')
   const [servico,      setServico]      = useState(null)
-  const [diaAtivo,     setDiaAtivo]     = useState(() => { const d = new Date(); d.setHours(0,0,0,0); return d })
-  const [ancora,       setAncora]       = useState(() => { const d = new Date(); d.setHours(0,0,0,0); return d })
-  const [mesCal,       setMesCal]       = useState(() => mesDe(new Date()))
+  const [diaAtivo,     setDiaAtivo]     = useState(() => diaNaBarbearia())
+  const [ancora,       setAncora]       = useState(() => diaNaBarbearia())
+  const [mesCal,       setMesCal]       = useState(() => mesDe(diaNaBarbearia()))
   const [calAberto,    setCalAberto]    = useState(false)
   const dias = useMemo(() => gerarDias(DIAS_NA_FITA, ancora), [ancora])
   const [slot,         setSlot]         = useState(null)
@@ -191,7 +187,7 @@ export default function AgendarPage() {
         ;(data || []).forEach(h => { map[h.dia_semana] = h })
         setHorarios(map)
       })
-    supabase.rpc('vitrine_dias_especiais', { p_slug: slug, p_desde: chaveDia(new Date()) })
+    supabase.rpc('vitrine_dias_especiais', { p_slug: slug, p_desde: chaveDia(diaNaBarbearia()) })
       .then(({ data }) => {
         const map = {}
         ;(data || []).forEach(d => { map[d.data] = d })
@@ -203,8 +199,8 @@ export default function AgendarPage() {
   useEffect(() => {
     if (!chaveOcupados) return
     let vivo = true
-    const inicio = new Date(diaAtivo); inicio.setHours(0, 0, 0, 0)
-    const fim    = new Date(diaAtivo); fim.setHours(23, 59, 59, 999)
+    const inicio = horaParaDate(diaAtivo, '00:00')
+    const fim    = new Date(horaParaDate(diaAtivo, '23:59').getTime() + 59999)
     supabase.rpc('horarios_ocupados', {
       p_salon_id: salonId,
       p_inicio: inicio.toISOString(),
@@ -235,7 +231,7 @@ export default function AgendarPage() {
   const erroMeusAgend    = !!chaveMeus && !loadingMeusAgend && meus.erro
 
   const agora = new Date()
-  const hoje = new Date(); hoje.setHours(0, 0, 0, 0)
+  const hoje = diaNaBarbearia()
   const ehHoje = isSameDay(diaAtivo, hoje)
 
   const horarioDoDia = useCallback((dia) => {
@@ -415,7 +411,7 @@ export default function AgendarPage() {
           <div className="card space-y-2.5">
             {[
               ['Serviço', servico?.label, false],
-              ['Data',    slot?.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' }), false],
+              ['Data',    slot && formatDataBarbearia(slot, { weekday: 'long', day: 'numeric', month: 'long' }), false],
               ['Horário', slotFim ? `${formatHora(slot)} – ${formatHora(slotFim)}` : formatHora(slot), true],
             ].map(([k, v, mono]) => (
               <div key={k} className="flex justify-between gap-4 text-apoio">
@@ -673,7 +669,7 @@ export default function AgendarPage() {
                       <div className="flex-1 min-w-0">
                         <p className="text-corpo font-semibold truncate">{a.servico}</p>
                         <p className="num text-micro text-cal-2 mt-0.5">
-                          {DIAS_SEMANA[new Date(a.data_hora).getDay()]} · {formatHora(a.data_hora)}
+                          {DIAS_SEMANA[diaNaBarbearia(a.data_hora).getDay()]} · {formatHora(a.data_hora)}
                           {a.valor ? ` · ${brlCompacto(a.valor)}` : ''}
                         </p>
                       </div>
@@ -705,7 +701,7 @@ export default function AgendarPage() {
                       <div className="flex-1 min-w-0">
                         <p className="text-corpo font-semibold truncate">{a.servico}</p>
                         <p className="num text-micro text-cal-2 mt-0.5">
-                          {DIAS_SEMANA[new Date(a.data_hora).getDay()]} · {formatHora(a.data_hora)}
+                          {DIAS_SEMANA[diaNaBarbearia(a.data_hora).getDay()]} · {formatHora(a.data_hora)}
                           {a.valor ? ` · ${brlCompacto(a.valor)}` : ''}
                         </p>
                       </div>
@@ -893,7 +889,7 @@ export default function AgendarPage() {
             <div className="card space-y-2.5">
               {[
                 ['Serviço', servico?.label, false],
-                ['Data',    slot?.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' }), false],
+                ['Data',    slot && formatDataBarbearia(slot, { weekday: 'long', day: 'numeric', month: 'long' }), false],
                 ['Horário', slotFim ? `${formatHora(slot)} – ${formatHora(slotFim)}` : formatHora(slot), true],
                 ['Duração', formatDuracao(servico?.duracao), true],
               ].map(([k, v, mono]) => (

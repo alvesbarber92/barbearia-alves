@@ -76,10 +76,51 @@ export function rotuloDuracaoPausa(minutos) {
   return DURACOES_PAUSA.find(d => d.minutos === minutos)?.label ?? `${minutos} min`
 }
 
+export const FUSO_BARBEARIA = 'America/Sao_Paulo'
+
+const relogioBarbearia = new Intl.DateTimeFormat('en-US', {
+  timeZone: FUSO_BARBEARIA, hourCycle: 'h23',
+  year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: 'numeric',
+})
+
+function partesNaBarbearia(instante) {
+  const p = {}
+  for (const { type, value } of relogioBarbearia.formatToParts(instante)) p[type] = Number(value)
+  return p
+}
+
+export function diaNaBarbearia(instante = new Date()) {
+  const p = partesNaBarbearia(new Date(instante))
+  return new Date(p.year, p.month - 1, p.day)
+}
+
+export function instanteNaBarbearia(dia, hhmm) {
+  const [h, m] = hhmm.slice(0, 5).split(':').map(Number)
+  const alvo = Date.UTC(dia.getFullYear(), dia.getMonth(), dia.getDate(), h, m)
+  let t = alvo
+  for (let i = 0; i < 2; i++) {
+    const p = partesNaBarbearia(new Date(t))
+    t += alvo - Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute)
+  }
+  return new Date(t)
+}
+
+export function horaNaBarbearia(instante) {
+  return partesNaBarbearia(new Date(instante)).hour
+}
+
+export function formatHoraBarbearia(instante) {
+  return new Date(instante).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: FUSO_BARBEARIA })
+}
+
+export function formatDataBarbearia(instante, opcoes) {
+  return new Date(instante).toLocaleDateString('pt-BR', { ...opcoes, timeZone: FUSO_BARBEARIA })
+}
+
 export const MESES_LIMITE_AGENDAMENTO = 3
 
 export function ultimoDiaAgendavelData() {
-  const hoje = new Date()
+  const hoje = diaNaBarbearia()
   const d = new Date(hoje.getFullYear(), hoje.getMonth() + MESES_LIMITE_AGENDAMENTO, 1)
   const diasNoMes = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate()
   d.setDate(Math.min(hoje.getDate(), diasNoMes))
@@ -91,7 +132,7 @@ export function ultimoDiaAgendavel() {
 }
 
 export function primeiroDiaAgendavel() {
-  return chaveDia(new Date())
+  return chaveDia(diaNaBarbearia())
 }
 
 export const TETO_PRECO = 99999.99

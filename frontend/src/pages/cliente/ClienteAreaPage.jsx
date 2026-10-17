@@ -5,15 +5,13 @@ import toast from 'react-hot-toast'
 import StatusBadge from '../../components/ui/StatusBadge'
 import DataRail from '../../components/ui/DataRail'
 import Monogram from '../../components/ui/Monogram'
-import { brlCompacto } from '../../lib/agenda'
+import { brlCompacto, diaNaBarbearia, formatHoraBarbearia } from '../../lib/agenda'
 import { useConfirmacao } from '../../hooks/useConfirmacao'
 import { Calendar, ClipboardList, LogOut, ArrowLeft } from 'lucide-react'
 
 const DIAS_SEMANA = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
 
-function formatHora(iso) {
-  return new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
-}
+const formatHora = formatHoraBarbearia
 
 export default function ClienteAreaPage() {
   const navigate = useNavigate()
@@ -178,7 +176,7 @@ export default function ClienteAreaPage() {
                       <div className="flex-1 min-w-0">
                         <p className="text-corpo font-semibold truncate">{a.servico}</p>
                         <p className="num text-micro text-cal-2 mt-0.5">
-                          {DIAS_SEMANA[new Date(a.data_hora).getDay()]} · {formatHora(a.data_hora)}
+                          {DIAS_SEMANA[diaNaBarbearia(a.data_hora).getDay()]} · {formatHora(a.data_hora)}
                           {a.valor ? ` · ${brlCompacto(a.valor)}` : ''}
                         </p>
                         {a.salao_nome && (
@@ -213,7 +211,7 @@ export default function ClienteAreaPage() {
                       <div className="flex-1 min-w-0">
                         <p className="text-corpo font-semibold truncate">{a.servico}</p>
                         <p className="num text-micro text-cal-2 mt-0.5">
-                          {DIAS_SEMANA[new Date(a.data_hora).getDay()]} · {formatHora(a.data_hora)}
+                          {DIAS_SEMANA[diaNaBarbearia(a.data_hora).getDay()]} · {formatHora(a.data_hora)}
                           {a.valor ? ` · ${brlCompacto(a.valor)}` : ''}
                         </p>
                         {a.salao_nome && (

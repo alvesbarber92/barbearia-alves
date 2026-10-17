@@ -1,7 +1,9 @@
+import { diaNaBarbearia } from '../../lib/agenda'
+
 const MESES = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez']
 
 export default function DataRail({ iso }) {
-  const d = new Date(iso)
+  const d = diaNaBarbearia(iso)
   return (
     <div className="w-12 flex-shrink-0 text-center rounded-chapa bg-elevado py-1.5">
       <p className="num text-card font-semibold leading-none">{d.getDate()}</p>
