@@ -544,6 +544,8 @@ begin
     raise warning 'gerar_agendamentos_fixos falhou para %: %', p_salon_id, sqlerrm;
   end;
 
+  perform pg_advisory_xact_lock(hashtextextended(p_salon_id::text, 0));
+
   v_local := p_data_hora at time zone 'America/Sao_Paulo';
   v_dia   := v_local::date;
 
@@ -1400,10 +1402,67 @@ begin
 end $function$
 ;
 
+CREATE OR REPLACE FUNCTION public.valida_expediente_agendamento()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+declare
+  v_local timestamp;
+  v_dia   date;
+  v_fim   timestamp;
+  v_exp   record;
+  v_pausa record;
+begin
+  if new.status = 'cancelado' then
+    return new;
+  end if;
+  if tg_op = 'UPDATE'
+     and old.status <> 'cancelado'
+     and new.data_hora is not distinct from old.data_hora
+     and new.duracao is not distinct from old.duracao then
+    return new;
+  end if;
+
+  v_local := new.data_hora at time zone 'America/Sao_Paulo';
+  v_dia   := v_local::date;
+  v_fim   := v_local + make_interval(mins => new.duracao);
+
+  select * into v_exp from public.expediente_do_dia(new.salon_id, v_dia);
+  if v_exp.fechado then
+    raise exception 'A barbearia não abre neste dia' using errcode = 'P0001';
+  end if;
+  if v_local < v_dia + v_exp.abertura or v_fim > v_dia + v_exp.fechamento then
+    raise exception 'Horário fora do expediente da barbearia' using errcode = 'P0001';
+  end if;
+
+  select * into v_pausa from public.pausa_do_dia(new.salon_id, v_dia);
+  if v_pausa.inicio is not null
+     and v_local < v_dia + v_pausa.inicio + make_interval(mins => v_pausa.minutos)
+     and v_fim > v_dia + v_pausa.inicio then
+    raise exception 'Esse horário é o intervalo da barbearia. Escolha outro.' using errcode = 'P0001';
+  end if;
+
+  if exists (
+    select 1 from bloqueios_horario b
+    where b.salon_id = new.salon_id
+      and b.data = v_dia
+      and v_local < v_dia + b.inicio + make_interval(mins => b.minutos)
+      and v_fim > v_dia + b.inicio
+  ) then
+    raise exception 'Esse horário está bloqueado pela barbearia. Escolha outro.' using errcode = 'P0001';
+  end if;
+
+  return new;
+end $function$
+;
+
 alter table public.salons add constraint salons_slug_nao_reservado CHECK ((NOT slug_reservado(slug)));
 
 CREATE TRIGGER trg_agendamento_preenche_duracao BEFORE INSERT ON public.agendamentos FOR EACH ROW EXECUTE FUNCTION preenche_duracao_agendamento();
 CREATE TRIGGER trg_valida_conflito_agendamento BEFORE INSERT OR UPDATE OF data_hora, status, servico_id, duracao ON public.agendamentos FOR EACH ROW EXECUTE FUNCTION valida_conflito_agendamento();
+CREATE TRIGGER trg_valida_expediente_agendamento BEFORE INSERT OR UPDATE OF data_hora, duracao, status ON public.agendamentos FOR EACH ROW EXECUTE FUNCTION valida_expediente_agendamento();
 CREATE TRIGGER trg_valida_limite_agendamento BEFORE INSERT OR UPDATE OF data_hora ON public.agendamentos FOR EACH ROW EXECUTE FUNCTION valida_limite_agendamento();
 CREATE TRIGGER salons_seed_horarios AFTER INSERT ON public.salons FOR EACH ROW EXECUTE FUNCTION seed_horarios_novo_salao();
 CREATE TRIGGER salons_seed_modulos AFTER INSERT ON public.salons FOR EACH ROW EXECUTE FUNCTION seed_modulos_novo_salao();
@@ -1606,6 +1665,7 @@ revoke execute on function public.seed_horarios_novo_salao() from public, anon, 
 revoke execute on function public.seed_modulos_novo_salao() from public, anon, authenticated;
 revoke execute on function public.valida_conflito_agendamento() from public, anon, authenticated;
 revoke execute on function public.valida_limite_agendamento() from public, anon, authenticated;
+revoke execute on function public.valida_expediente_agendamento() from public, anon, authenticated;
 revoke execute on function public.expediente_do_dia(p_salon_id uuid, p_dia date) from public, anon, authenticated;
 revoke execute on function public.gerar_agendamentos_fixos(p_salon_id uuid, p_fixo_id uuid) from public, anon, authenticated;
 revoke execute on function public.pausa_do_dia(p_salon_id uuid, p_dia date) from public, anon, authenticated;

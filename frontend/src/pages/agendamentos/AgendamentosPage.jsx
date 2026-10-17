@@ -319,6 +319,8 @@ export default function AgendamentosPage() {
         toast.error('Esse horário já está ocupado. Escolha outro.')
       } else if (String(error.message || '').includes('3 meses')) {
         toast.error(`Só dá para agendar até ${MESES_LIMITE_AGENDAMENTO} meses à frente`)
+      } else if (error.code === 'P0001' && error.message) {
+        toast.error(error.message)
       } else {
         toast.error('Erro ao agendar')
       }
