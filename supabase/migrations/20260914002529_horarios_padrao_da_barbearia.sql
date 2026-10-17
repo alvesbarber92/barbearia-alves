@@ -1,19 +1,3 @@
--- Aplicada no banco em 14/09/2026 (UTC) pelo conector, registrada lá como
--- "horarios_padrao_da_barbearia".
---
--- Horário inicial de toda barbearia nova: seg–sex 09–18, sáb 09–14, dom fechado.
--- O dono ajusta em Configurações > Horários; cada barbearia tem os seus
--- (decisão do Ricardo, 14/09/2026; o cadastro inicial não ganha etapa de
--- horários).
---
--- Antes: barbearia recém-criada não tinha linha em `horarios`. A tela de
--- Configurações mostrava um padrão (dom fechado, sáb 14h) que não estava
--- gravado, enquanto o link de agendamento e o banco usavam outro (9–18 todo
--- dia). Agora as 7 linhas nascem junto com a barbearia, como os módulos.
---
--- O padrão mora em um lugar só no banco: horario_padrao(). A cópia do
--- frontend (lib/agenda.js, horarioPadrao) tem de bater com ela.
-
 create or replace function public.horario_padrao(p_dia_semana integer)
  returns table(ativo boolean, abertura time without time zone, fechamento time without time zone)
  language sql
@@ -45,12 +29,9 @@ create trigger salons_seed_horarios
   after insert on public.salons
   for each row execute function public.seed_horarios_novo_salao();
 
--- Ninguém chama por nome: a de trigger dispara sozinha e horario_padrao só é
--- usada por funções do próprio banco.
 revoke execute on function public.seed_horarios_novo_salao() from public, anon, authenticated;
 revoke execute on function public.horario_padrao(integer) from public, anon, authenticated;
 
--- Barbearias que já existem e estão sem algum dia. Dia já salvo não é tocado.
 insert into public.horarios (salon_id, dia_semana, ativo, abertura, fechamento)
 select s.id, d, p.ativo, p.abertura, p.fechamento
 from public.salons s
@@ -58,8 +39,6 @@ cross join generate_series(0, 6) as d
 cross join lateral public.horario_padrao(d) as p
 on conflict (salon_id, dia_semana) do nothing;
 
--- criar_agendamento_cliente: corpo idêntico ao de dias_especiais, trocando só
--- o dia sem linha, que deixa de valer 9–18 todo dia e passa a usar o padrão.
 CREATE OR REPLACE FUNCTION public.criar_agendamento_cliente(p_salon_id uuid, p_servico_id uuid, p_data_hora timestamp with time zone, p_nome text, p_telefone text, p_observacoes text DEFAULT NULL::text)
  RETURNS uuid
  LANGUAGE plpgsql
@@ -90,8 +69,6 @@ begin
     raise exception 'A data do agendamento tem de ser futura' using errcode = 'P0001';
   end if;
 
-  -- Serviço tem de pertencer a este salão e estar ativo. É o que impede
-  -- preço forjado e agendamento de serviço de outra barbearia.
   select s.nome, s.preco, coalesce(s.duracao, 30) into v_nome_serv, v_preco, v_duracao
   from servicos s
   where s.id = p_servico_id and s.salon_id = p_salon_id and s.ativo;
@@ -104,7 +81,6 @@ begin
     raise exception 'Barbearia indisponível' using errcode = 'P0001';
   end if;
 
-  -- Expediente do dia: data especial, linha da semana, padrão.
   v_local := p_data_hora at time zone 'America/Sao_Paulo';
   v_dia   := v_local::date;
 
@@ -118,21 +94,16 @@ begin
     where h.salon_id = p_salon_id and h.dia_semana = extract(dow from v_dia)::int;
 
     if not found then
-      -- Dia sem linha: não deveria mais acontecer, as linhas nascem com a
-      -- barbearia. Vale o mesmo padrão do cadastro.
       select p.ativo, p.abertura, p.fechamento into v_ativo, v_abertura, v_fechamento
       from public.horario_padrao(extract(dow from v_dia)::int) as p;
     end if;
     v_fechado := not v_ativo;
   end if;
 
-  -- As mensagens são lidas pelo AgendarPage: mudar o texto quebra o aviso.
   if v_fechado then
     raise exception 'A barbearia não abre neste dia' using errcode = 'P0001';
   end if;
 
-  -- Serviço sem duração conta 30 min, como no trigger de conflito. A tela usa
-  -- 60, então o banco nunca recusa um horário que a tela ofereceu.
   if v_local < v_dia + v_abertura
      or v_local + make_interval(mins => v_duracao) > v_dia + v_fechamento then
     raise exception 'Horário fora do expediente da barbearia' using errcode = 'P0001';
@@ -155,8 +126,6 @@ begin
      where id = v_cliente;
   end if;
 
-  -- limite de 2 agendamentos futuros por cliente, para evitar que alguém
-  -- trave a agenda marcando horário em série.
   select count(*) into v_futuros
   from agendamentos a
   where a.cliente_id = v_cliente

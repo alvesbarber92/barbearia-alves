@@ -1,27 +1,3 @@
--- Aplicada no banco em 18/09/2026 (UTC), registrada lá como
--- "slugs_reservados_no_banco". O cabeçalho anterior deste arquivo dizia que a
--- aplicação tinha acontecido em 15/09 — não tinha: o commit entregou só a
--- metade do código, e o banco ficou sem a função e sem a constraint por três
--- dias. Só conferir a lista de migrations do projeto revela esse tipo de
--- diferença; o arquivo sozinho não prova nada.
---
--- ⚠️ Esta migration foi aplicada com um erro e é corrigida pela seguinte,
--- `20260918023012_criar_salao_com_convite_sem_dono_email.sql`: o INSERT abaixo
--- ainda grava em `salons.dono_email`, coluna que já tinha sido removida do
--- banco quando o e-mail do dono passou a vir de `auth.users` por `dono_id`.
--- PL/pgSQL só resolve nome de coluna em tempo de execução, então a criação da
--- função passou sem reclamar e o erro só apareceria ao cadastrar a próxima
--- barbearia. Fica registrado como aconteceu, não como deveria ter sido.
---
--- A lista de slugs reservados só existia no frontend (src/utils/slug.js). Quem
--- chamasse a RPC direto, ou trocasse o link pelo update de `salons` do
--- onboarding, gravava `admin` ou `login` sem tropeçar em nada — e a barbearia
--- nascia inacessível, porque a rota fixa do App.jsx ganha de `/:slug`.
---
--- A lista fica repetida aqui de propósito: constraint de banco precisa de
--- função IMMUTABLE, e ler de uma tabela não é immutable. Rota nova no App.jsx
--- entra nos dois lugares.
-
 create or replace function public.slug_reservado(p_slug text)
 returns boolean
 language sql
@@ -38,15 +14,9 @@ $fn$;
 revoke execute on function public.slug_reservado(text) from public, anon;
 grant  execute on function public.slug_reservado(text) to authenticated;
 
--- A trava que vale de verdade: pega a criação pela RPC e a troca de link pelo
--- update do onboarding, que passa direto pela policy salons_owner_alteracao.
 alter table public.salons
   add constraint salons_slug_nao_reservado check (not public.slug_reservado(slug));
 
--- ===== As duas portas, com resposta melhor que erro de constraint =====
-
--- O campo do onboarding consulta esta função enquanto a pessoa digita: slug
--- reservado passa a responder "indisponível" no mesmo caminho de slug tomado.
 create or replace function public.slug_disponivel(p_slug text)
 returns boolean
 language sql
@@ -57,8 +27,6 @@ as $fn$
      and not exists (select 1 from salons s where s.slug = p_slug)
 $fn$;
 
--- Na criação, `slug_reservado` vira errcode próprio em vez de estourar na
--- constraint: a tela traduz a chave e pede outro nome.
 create or replace function public.criar_salao_com_convite(
   p_nome              text,
   p_slug              text,
@@ -101,8 +69,6 @@ begin
     raise exception 'slug_reservado' using errcode = 'P0001';
   end if;
 
-  -- `for update` segura a linha até o fim desta transação: em dois cadastros
-  -- simultâneos com o mesmo código, o segundo espera e encontra `usado_por`.
   select * into v_convite from convites c where c.codigo = v_codigo for update;
 
   if not found or v_convite.usado_por is not null then

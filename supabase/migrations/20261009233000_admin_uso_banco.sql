@@ -1,10 +1,3 @@
--- Uso do projeto para o painel da plataforma: tamanho do banco, arquivos no
--- storage, contas e as maiores tabelas. E o que o Supabase mede para cobrar;
--- o valor da fatura em si nao fica no banco, so na conta do Supabase.
---
--- Usuarios ativos e aproximado: o Supabase conta MAU por quem usou a sessao no
--- mes, aqui conta quem fez login nos ultimos 30 dias.
-
 create or replace function public.admin_uso_banco()
   returns jsonb
   language plpgsql

@@ -1,19 +1,3 @@
--- Aplicada no banco em 11/09/2026. Registrada aqui para a pasta de migrations
--- nao ficar mais fora de sincronia do que ja esta.
---
--- O agendamento feito pelo cliente no link nascia 'pendente'. Nada no produto
--- confirmava: nao existe tela para isso, o StatusBadge mostrava "confirmado"
--- de qualquer jeito, e o financeiro filtra status='confirmado' -- entao todo
--- agendamento online ficava invisivel no caixa, para sempre.
---
--- A tela do cliente ja diz "Agendamento confirmado" ao terminar. O produto nao
--- tem etapa de aprovacao; 'pendente' era rotulo errado. Passa a nascer
--- 'confirmado', que e tambem o default da coluna.
---
--- Corpo identico ao anterior, trocando apenas o literal do insert. O limite de
--- 2 futuros por cliente e a checagem status in ('pendente','confirmado') ficam
--- como estavam -- a segunda continua tolerando linhas antigas.
-
 CREATE OR REPLACE FUNCTION public.criar_agendamento_cliente(p_salon_id uuid, p_servico_id uuid, p_data_hora timestamp with time zone, p_nome text, p_telefone text, p_observacoes text DEFAULT NULL::text)
  RETURNS uuid
  LANGUAGE plpgsql
@@ -88,5 +72,4 @@ begin
 end;
 $function$;
 
--- Linhas que ja nasceram com o rotulo errado.
 update agendamentos set status = 'confirmado' where status = 'pendente';

@@ -1,19 +1,5 @@
--- Aplicada no banco em 14/09/2026 (UTC) pelo conector, registrada lá como
--- "duracao_congelada_no_agendamento".
---
--- Antes: agendamentos não guardava duração. horarios_ocupados, o trigger de
--- conflito e as telas liam servicos.duracao na hora. Mudar a duração de um
--- serviço mudava em silêncio o intervalo dos agendamentos já marcados: um
--- corte de 30 que virava 60 passava a invadir o horário seguinte, e um de 60
--- que virava 30 liberava meia hora que já estava tomada.
---
--- Agora a duração é gravada no agendamento quando ele nasce e não acompanha
--- mais o serviço.
-
 alter table public.agendamentos add column duracao integer;
 
--- Existentes: a duração que o banco já usava para eles (30 quando o serviço
--- não tem duração ou foi apagado).
 update public.agendamentos a
    set duracao = coalesce(
          (select s.duracao from public.servicos s where s.id = a.servico_id),
@@ -24,8 +10,6 @@ alter table public.agendamentos
   alter column duracao set not null,
   add constraint agendamentos_duracao_positiva check (duracao > 0);
 
--- Preenche pelo serviço quando o insert não informa. Cobre os dois caminhos:
--- criar_agendamento_cliente (cliente) e o insert direto da agenda do dono.
 create or replace function public.preenche_duracao_agendamento()
  returns trigger
  language plpgsql
@@ -42,16 +26,12 @@ begin
 end;
 $function$;
 
--- O nome importa: triggers BEFORE da mesma tabela disparam em ordem
--- alfabética, e este tem de rodar antes de trg_valida_conflito_agendamento,
--- que já lê new.duracao.
 create trigger trg_agendamento_preenche_duracao
   before insert on public.agendamentos
   for each row execute function public.preenche_duracao_agendamento();
 
 revoke execute on function public.preenche_duracao_agendamento() from public, anon, authenticated;
 
--- Conflito: mesma lógica, com a duração do próprio agendamento dos dois lados.
 CREATE OR REPLACE FUNCTION public.valida_conflito_agendamento()
  RETURNS trigger
  LANGUAGE plpgsql
@@ -82,7 +62,6 @@ begin
 end;
 $function$;
 
--- Mudar a duração de um agendamento também tem de passar pela checagem.
 drop trigger trg_valida_conflito_agendamento on public.agendamentos;
 create trigger trg_valida_conflito_agendamento
   before insert or update of data_hora, status, servico_id, duracao on public.agendamentos

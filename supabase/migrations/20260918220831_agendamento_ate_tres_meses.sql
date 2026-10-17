@@ -1,6 +1,3 @@
--- Agendamento só até 3 meses à frente (inclui o dia inteiro do limite, no
--- horário de Brasília). Vale para todo caminho: painel, RPC do cliente, API.
--- Update que não mexe na data passa, para não travar registros antigos.
 create or replace function public.valida_limite_agendamento() returns trigger
 language plpgsql set search_path = public as $$
 begin

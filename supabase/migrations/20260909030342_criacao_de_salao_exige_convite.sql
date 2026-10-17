@@ -1,24 +1,3 @@
--- ⚠️ ARQUIVO HISTORICO, NAO APLICAR. Veio na copia do SalaoApp e nunca foi
--- registrado neste banco. A funcao `criar_salao_com_convite` aqui dentro ainda
--- insere em `salons.dono_email`, coluna que nao existe mais: aplicar isto hoje
--- quebra o cadastro de barbearia nova. A versao valida esta em
--- `20260918023012_criar_salao_com_convite_sem_dono_email.sql`.
---
--- Criar salão deixa de ser livre: passa a exigir um convite emitido no /admin.
---
--- A trava tem de ser no banco. Bloquear só a tela /cadastro no React não serve:
--- dá para chamar supabase.auth.signUp() pelo console e ir direto ao /onboarding,
--- que inseria em `salons` amparado pela policy salons_owner. Por isso o INSERT
--- sai da policy e a criação passa a existir apenas dentro da função abaixo.
---
--- Dois mecanismos contra compartilhamento, de propósito:
---   uso único  — `usado_por` é gravado na mesma transação que cria o salão, com
---                `for update` no convite: dois cadastros simultâneos com o mesmo
---                código, só um passa. É o que torna inútil um código repassado;
---   validade   — `expira_em`, 5 minutos por padrão, cobre o outro caso: o código
---                que vazou e ainda não foi usado. Prazo é parâmetro de
---                admin_gerar_convite, então dá para afrouxar sem migration.
-
 create table if not exists public.convites (
   codigo     text primary key,
   nota       text,
@@ -32,11 +11,7 @@ create table if not exists public.convites (
 
 alter table public.convites enable row level security;
 
--- Sem policy nenhuma, como plataforma_admins: ninguém lê nem escreve direto.
--- Todo acesso passa pelas funções SECURITY DEFINER abaixo.
 revoke all on table public.convites from anon, authenticated;
-
--- ===== Emissão (você, no /admin) =====
 
 create or replace function public.admin_gerar_convite(p_nota text default null, p_minutos int default 5)
 returns public.convites
@@ -45,7 +20,6 @@ security definer
 set search_path to 'public', 'pg_temp'
 as $fn$
 declare
-  -- sem I, O, 0 e 1: o código é ditado por telefone e por WhatsApp
   v_alfabeto  constant text := 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   v_codigo    text;
   v_i         int;
@@ -101,8 +75,6 @@ as $fn$
   limit greatest(1, least(coalesce(p_limite, 30), 200))
 $fn$;
 
--- ===== Conferência na tela de cadastro (antes de existir sessão) =====
-
 create or replace function public.convite_valido(p_codigo text)
 returns boolean
 language sql
@@ -117,8 +89,6 @@ as $fn$
       and c.expira_em > now()
   );
 $fn$;
-
--- ===== Criação do salão =====
 
 create or replace function public.criar_salao_com_convite(
   p_nome              text,
@@ -158,8 +128,6 @@ begin
     raise exception 'slug_obrigatorio' using errcode = 'P0001';
   end if;
 
-  -- `for update` segura a linha até o fim desta transação: em dois cadastros
-  -- simultâneos com o mesmo código, o segundo espera e encontra `usado_por`.
   select * into v_convite from convites c where c.codigo = v_codigo for update;
 
   if not found or v_convite.usado_por is not null then
@@ -193,10 +161,6 @@ begin
 end
 $fn$;
 
--- ===== Fecha o INSERT direto em salons =====
--- salons_owner era FOR ALL e amparava o insert do onboarding. Vira três policies
--- sem INSERT: a única porta de criação passa a ser a função acima.
-
 drop policy if exists salons_owner on public.salons;
 
 create policy salons_owner_leitura on public.salons
@@ -212,8 +176,6 @@ create policy salons_owner_exclusao on public.salons
   for delete to authenticated
   using (dono_id = (select auth.uid()));
 
--- ===== Permissões =====
-
 revoke execute on function public.admin_gerar_convite(text, int) from public, anon;
 grant  execute on function public.admin_gerar_convite(text, int) to authenticated;
 
@@ -223,5 +185,4 @@ grant  execute on function public.admin_listar_convites(int) to authenticated;
 revoke execute on function public.criar_salao_com_convite(text, text, text, text, timestamptz, text) from public, anon;
 grant  execute on function public.criar_salao_com_convite(text, text, text, text, timestamptz, text) to authenticated;
 
--- Conferido na tela de cadastro, onde ainda não há sessão.
 grant  execute on function public.convite_valido(text) to anon, authenticated;

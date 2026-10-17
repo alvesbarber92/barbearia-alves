@@ -1,27 +1,3 @@
--- ============================================================================
---  BarberVez - retrato do schema
---  Projeto Supabase - gerado em 18 de setembro de 2026,
---  atualizado em 25 de setembro de 2026 (horario fixo e pausa/almoco)
--- ============================================================================
---
--- Este arquivo e a FONTE DE VERDADE do schema, e nao um historico.
---
--- Por que um retrato e nao a soma das migrations: parte da base foi construida
--- pelo painel do Supabase. `salon_modulos`, `plataforma_admins`,
--- `auditoria_admin`, `eh_admin` e as funcoes `admin_*` nao aparecem em migration
--- nenhuma. A remocao de `salons.dono_email` - o e-mail do dono passou a vir de
--- `auth.users` por `dono_id` - tambem foi feita a mao, e so foi percebida em
--- 18/09/2026, quando uma migration antiga foi reaplicada e voltou a inserir
--- numa coluna que nao existe mais. Replayar `migrations/` num banco vazio NAO
--- reproduz este schema; aplicar este arquivo reproduz.
---
--- Gerado por introspeccao (pg_catalog + information_schema), nao por pg_dump.
--- Nao inclui: extensoes, o schema `auth` do Supabase, nem dados.
---
--- Para regerar depois de uma alteracao, ver README.md nesta pasta.
-
--- ===== TABELAS =====
-
 create table public.admin_observando (
   admin_id uuid not null,
   salon_id uuid not null,
@@ -208,8 +184,6 @@ create table public.vendas (
   custo_total numeric
 );
 
--- ===== CONSTRAINTS =====
-
 alter table public.admin_observando add constraint admin_observando_pkey PRIMARY KEY (admin_id);
 alter table public.admin_observando add constraint admin_observando_admin_id_fkey FOREIGN KEY (admin_id) REFERENCES auth.users(id) ON DELETE CASCADE;
 alter table public.admin_observando add constraint admin_observando_salon_id_fkey FOREIGN KEY (salon_id) REFERENCES salons(id) ON DELETE CASCADE;
@@ -278,17 +252,9 @@ alter table public.vendas add constraint vendas_cliente_id_fkey FOREIGN KEY (cli
 alter table public.vendas add constraint vendas_produto_id_fkey FOREIGN KEY (produto_id) REFERENCES estoque(id) ON DELETE SET NULL;
 alter table public.vendas add constraint vendas_salon_id_fkey FOREIGN KEY (salon_id) REFERENCES salons(id) ON DELETE CASCADE;
 
--- Teto por unidade. Entraram NOT VALID em 23/09/2026, porque linhas de teste
--- violavam o limite; depois que os valores foram ajustados, foram validadas.
--- Hoje valem para tudo, passado e futuro, aqui e no banco.
 alter table public.agendamentos add constraint agendamentos_valor_ate_100k CHECK (((valor IS NULL) OR ((valor >= (0)::numeric) AND (valor <= 99999.99))));
 alter table public.estoque add constraint estoque_precos_ate_100k CHECK ((((preco_custo IS NULL) OR ((preco_custo >= (0)::numeric) AND (preco_custo <= 99999.99))) AND ((preco_venda IS NULL) OR ((preco_venda >= (0)::numeric) AND (preco_venda <= 99999.99)))));
 alter table public.servicos add constraint servicos_preco_ate_100k CHECK (((preco IS NULL) OR ((preco >= (0)::numeric) AND (preco <= 99999.99))));
-
--- ===== INDICES =====
---
--- Os seis pares duplicados que existiam no retrato de 8/9/2026 sairam do banco:
--- hoje ha um indice por coluna.
 
 CREATE INDEX idx_admin_observando_salon ON public.admin_observando USING btree (salon_id);
 CREATE INDEX idx_agendamentos_cliente ON public.agendamentos USING btree (cliente_id);
@@ -307,8 +273,6 @@ CREATE INDEX idx_salons_dono_id ON public.salons USING btree (dono_id);
 CREATE INDEX idx_servicos_salon_id ON public.servicos USING btree (salon_id);
 CREATE INDEX idx_vendas_salon_data ON public.vendas USING btree (salon_id, data_venda);
 CREATE INDEX idx_vendas_salon_id ON public.vendas USING btree (salon_id);
-
--- ===== FUNCOES =====
 
 CREATE OR REPLACE FUNCTION public.admin_auditoria_salao(p_salon_id uuid, p_limite integer DEFAULT 20)
  RETURNS TABLE(acao text, detalhe jsonb, criado_em timestamp with time zone)
@@ -562,8 +526,6 @@ begin
     raise exception 'A data do agendamento tem de ser futura' using errcode = 'P0001';
   end if;
 
-  -- Serviço tem de pertencer a este salão e estar ativo. É o que impede
-  -- preço forjado e agendamento de serviço de outra barbearia.
   select s.nome, s.preco, coalesce(s.duracao, 30) into v_nome_serv, v_preco, v_duracao
   from servicos s
   where s.id = p_servico_id and s.salon_id = p_salon_id and s.ativo;
@@ -576,17 +538,12 @@ begin
     raise exception 'Barbearia indisponível' using errcode = 'P0001';
   end if;
 
-  -- Horário fixo: cria as datas que entraram na janela de 3 meses ANTES de
-  -- gravar este agendamento, para o cliente do link não pegar o horário de
-  -- quem é fixo. Se a geração falhar, o agendamento segue: um defeito no fixo
-  -- não pode impedir a barbearia de receber cliente.
   begin
     perform public.gerar_agendamentos_fixos(p_salon_id);
   exception when others then
     raise warning 'gerar_agendamentos_fixos falhou para %: %', p_salon_id, sqlerrm;
   end;
 
-  -- Expediente do dia: data especial, linha da semana, padrão.
   v_local := p_data_hora at time zone 'America/Sao_Paulo';
   v_dia   := v_local::date;
 
@@ -600,28 +557,21 @@ begin
     where h.salon_id = p_salon_id and h.dia_semana = extract(dow from v_dia)::int;
 
     if not found then
-      -- Dia sem linha: não deveria mais acontecer, as linhas nascem com a
-      -- barbearia. Vale o mesmo padrão do cadastro.
       select p.ativo, p.abertura, p.fechamento into v_ativo, v_abertura, v_fechamento
       from public.horario_padrao(extract(dow from v_dia)::int) as p;
     end if;
     v_fechado := not v_ativo;
   end if;
 
-  -- As mensagens são lidas pelo AgendarPage: mudar o texto quebra o aviso.
   if v_fechado then
     raise exception 'A barbearia não abre neste dia' using errcode = 'P0001';
   end if;
 
-  -- Serviço sem duração conta 30 min, como no trigger de conflito. A tela usa
-  -- 60, então o banco nunca recusa um horário que a tela ofereceu.
   if v_local < v_dia + v_abertura
      or v_local + make_interval(mins => v_duracao) > v_dia + v_fechamento then
     raise exception 'Horário fora do expediente da barbearia' using errcode = 'P0001';
   end if;
 
-  -- Pausa: o serviço não pode encostar no intervalo do barbeiro. O texto vai
-  -- direto para o cliente (AgendarPage mostra a mensagem de P0001).
   select * into v_pausa from public.pausa_do_dia(p_salon_id, v_dia);
   if v_pausa.inicio is not null
      and v_local < v_dia + v_pausa.inicio + make_interval(mins => v_pausa.minutos)
@@ -629,8 +579,6 @@ begin
     raise exception 'Esse horário é o intervalo da barbearia. Escolha outro.' using errcode = 'P0001';
   end if;
 
-  -- Bloqueio avulso: o dono tirou este horario do dia. Mesma mensagem do
-  -- intervalo, que o AgendarPage ja sabe exibir.
   if exists (
     select 1 from bloqueios_horario b
     where b.salon_id = p_salon_id
@@ -658,10 +606,6 @@ begin
      where id = v_cliente;
   end if;
 
-  -- limite de 2 agendamentos futuros por cliente, para evitar que alguém
-  -- trave a agenda marcando horário em série.
-  -- Horário fixo: as datas do fixo não contam. Foi o dono quem marcou, e com
-  -- elas contando o cliente fixo nunca mais marcaria um horário extra.
   select count(*) into v_futuros
   from agendamentos a
   where a.cliente_id = v_cliente
@@ -720,8 +664,6 @@ begin
     raise exception 'slug_reservado' using errcode = 'P0001';
   end if;
 
-  -- `for update` segura a linha ate o fim desta transacao: em dois cadastros
-  -- simultaneos com o mesmo codigo, o segundo espera e encontra `usado_por`.
   select * into v_convite from convites c where c.codigo = v_codigo for update;
 
   if not found or v_convite.usado_por is not null then
@@ -778,8 +720,6 @@ begin
     raise exception 'quantidade_invalida' using errcode = 'P0001';
   end if;
 
-  -- Compra mais cara ou mais barata atualiza o custo do produto dali em
-  -- diante. As vendas ja feitas nao se mexem: o custo delas esta congelado.
   update estoque
      set quantidade  = coalesce(quantidade, 0) + p_quantidade,
          preco_custo = coalesce(p_preco_custo, preco_custo)
@@ -808,8 +748,6 @@ begin
     raise exception 'quantidade_invalida' using errcode = 'P0001';
   end if;
 
-  -- `for update` segura a linha ate o fim da transacao: duas baixas do mesmo
-  -- produto ao mesmo tempo nao podem ler o mesmo saldo e vender duas vezes.
   select * into v_item from estoque where id = p_produto_id for update;
 
   if not found then
@@ -841,8 +779,6 @@ end
 $function$
 ;
 
--- Fora da ordem alfabetica de proposito: `get_salon_id` chama esta funcao, e
--- funcao SQL tem o corpo conferido na criacao. Invertendo, a criacao falha.
 CREATE OR REPLACE FUNCTION public.get_salon_id_proprio()
  RETURNS uuid
  LANGUAGE sql
@@ -897,8 +833,6 @@ AS $function$
     and a.data_hora >= p_inicio
     and a.data_hora < least(p_fim, p_inicio + interval '31 days')
   union all
-  -- Pausa de cada dia da janela, no formato de um agendamento: a tela do
-  -- cliente esconde o horário sem precisar saber que é almoço.
   select (d::date + p.inicio) at time zone 'America/Sao_Paulo', p.minutos
   from generate_series(
          (p_inicio at time zone 'America/Sao_Paulo')::date::timestamp,
@@ -907,7 +841,6 @@ AS $function$
   cross join lateral public.pausa_do_dia(p_salon_id, d::date) as p
   where p.inicio is not null
   union all
-  -- Bloqueios avulsos do periodo, tambem no formato de um agendamento.
   select (b.data + b.inicio) at time zone 'America/Sao_Paulo', b.minutos
   from bloqueios_horario b
   where b.salon_id = p_salon_id
@@ -1245,8 +1178,6 @@ begin
 end $function$
 ;
 
--- Horario fixo (20260925193530_horario_fixo.sql)
-
 CREATE OR REPLACE FUNCTION public.expediente_do_dia(p_salon_id uuid, p_dia date, OUT fechado boolean, OUT abertura time without time zone, OUT fechamento time without time zone)
  RETURNS record
  LANGUAGE plpgsql
@@ -1281,7 +1212,6 @@ declare
   f           record;
   v_exp       record;
   v_pausa     record;
-  -- Último dia que `valida_limite_agendamento` aceita
   v_limite    date := ((now() at time zone 'America/Sao_Paulo')::date + interval '3 months')::date;
   v_passo     integer;
   v_dia       date;
@@ -1290,8 +1220,6 @@ declare
   v_preco     numeric;
   v_duracao   integer;
 begin
-  -- Mesma trava do trigger de conflito: duas gerações simultâneas (dois
-  -- clientes marcando ao mesmo tempo) não criam a mesma data duas vezes.
   perform pg_advisory_xact_lock(hashtextextended(p_salon_id::text, 0));
 
   for f in
@@ -1304,13 +1232,11 @@ begin
   loop
     select s.nome, s.preco, coalesce(s.duracao, 30) into v_nome, v_preco, v_duracao
     from servicos s where s.id = f.servico_id;
-    -- Serviço apagado: o fixo para de gerar, mas as datas já criadas ficam.
     continue when v_nome is null;
 
     v_passo := 7 * f.intervalo_semanas;
     v_dia := f.data_inicio;
     if f.gerado_ate is not null and f.gerado_ate >= v_dia then
-      -- Primeira data depois da última já gerada
       v_dia := f.data_inicio + ((f.gerado_ate - f.data_inicio) / v_passo + 1) * v_passo;
     end if;
 
@@ -1324,7 +1250,7 @@ begin
         if v_exp.fechado
            or f.hora < v_exp.abertura
            or f.hora + make_interval(mins => v_duracao) > v_exp.fechamento
-           or f.hora + make_interval(mins => v_duracao) < f.hora then  -- passou da meia-noite
+           or f.hora + make_interval(mins => v_duracao) < f.hora then
           situacao := 'fechado';
         elsif v_pausa.inicio is not null
               and f.hora < v_pausa.inicio + make_interval(mins => v_pausa.minutos)
@@ -1396,7 +1322,6 @@ begin
 
   return query select * from public.gerar_agendamentos_fixos(v_salon, v_id);
 
-  -- Nenhuma data livre: desfaz tudo em vez de deixar um fixo que não reserva nada
   if not exists (select 1 from agendamentos a where a.fixo_id = v_id) then
     raise exception 'Nenhuma data livre para esse horário fixo' using errcode = 'P0001';
   end if;
@@ -1449,8 +1374,6 @@ begin
 end $function$
 ;
 
--- Pausa / almoco (20260925200725_pausa_almoco.sql)
-
 CREATE OR REPLACE FUNCTION public.pausa_do_dia(p_salon_id uuid, p_dia date, OUT inicio time without time zone, OUT minutos integer)
  RETURNS record
  LANGUAGE plpgsql
@@ -1469,15 +1392,7 @@ begin
 end $function$
 ;
 
--- ===== CONSTRAINT QUE DEPENDE DE FUNCAO =====
---
--- Fica aqui, e nao no bloco de constraints la em cima, porque uma CHECK que
--- chama funcao so pode ser criada depois da funcao existir. Aplicar este
--- arquivo de cima para baixo num banco vazio falharia na ordem antiga.
-
 alter table public.salons add constraint salons_slug_nao_reservado CHECK ((NOT slug_reservado(slug)));
-
--- ===== TRIGGERS =====
 
 CREATE TRIGGER trg_agendamento_preenche_duracao BEFORE INSERT ON public.agendamentos FOR EACH ROW EXECUTE FUNCTION preenche_duracao_agendamento();
 CREATE TRIGGER trg_valida_conflito_agendamento BEFORE INSERT OR UPDATE OF data_hora, status, servico_id, duracao ON public.agendamentos FOR EACH ROW EXECUTE FUNCTION valida_conflito_agendamento();
@@ -1485,15 +1400,7 @@ CREATE TRIGGER trg_valida_limite_agendamento BEFORE INSERT OR UPDATE OF data_hor
 CREATE TRIGGER salons_seed_horarios AFTER INSERT ON public.salons FOR EACH ROW EXECUTE FUNCTION seed_horarios_novo_salao();
 CREATE TRIGGER salons_seed_modulos AFTER INSERT ON public.salons FOR EACH ROW EXECUTE FUNCTION seed_modulos_novo_salao();
 
--- ===== EVENT TRIGGER =====
---
--- Liga RLS sozinho em toda tabela nova criada no schema `public`. E a rede que
--- evita tabela nascendo aberta: sem ela, uma tabela criada as pressas pelo
--- painel fica legivel por qualquer pessoa com a chave anon.
-
 CREATE EVENT TRIGGER ensure_rls ON ddl_command_end EXECUTE FUNCTION rls_auto_enable();
-
--- ===== ROW LEVEL SECURITY =====
 
 alter table public.admin_observando enable row level security;
 alter table public.agendamentos enable row level security;
@@ -1512,18 +1419,6 @@ alter table public.salon_modulos enable row level security;
 alter table public.salons enable row level security;
 alter table public.servicos enable row level security;
 alter table public.vendas enable row level security;
-
--- `auditoria_admin`, `plataforma_admins` e `convites` ficam com RLS ativa e
--- NENHUMA policy, de proposito: isso as fecha para acesso direto, e so as
--- funcoes SECURITY DEFINER do painel conseguem le-las.
-
--- ===== POLICIES =====
---
--- Quatro por tabela de barbearia, e nao uma so com FOR ALL, por causa da
--- observacao do /admin: a LEITURA aceita a barbearia observada, a escrita e a
--- exclusao so aceitam a propria. Uma policy FOR ALL nao daria conta porque
--- DELETE nao passa por WITH CHECK -- o observador nao editaria nada e ainda
--- assim conseguiria apagar.
 
 create policy agendamentos_leitura on public.agendamentos as PERMISSIVE for SELECT to authenticated
   using ((salon_id = get_salon_id()));
@@ -1603,8 +1498,6 @@ create policy horarios_alteracao on public.horarios as PERMISSIVE for UPDATE to 
 create policy horarios_exclusao on public.horarios as PERMISSIVE for DELETE to authenticated
   using ((salon_id = get_salon_id_proprio()));
 
--- Horario fixo: so leitura. Criar, gerar e encerrar passam pelas funcoes
--- SECURITY DEFINER, que conferem cliente e servico da barbearia.
 create policy horarios_fixos_leitura on public.horarios_fixos as PERMISSIVE for SELECT to authenticated
   using ((salon_id = get_salon_id()));
 
@@ -1660,8 +1553,6 @@ create policy vendas_alteracao on public.vendas as PERMISSIVE for UPDATE to auth
 create policy vendas_exclusao on public.vendas as PERMISSIVE for DELETE to authenticated
   using ((salon_id = get_salon_id_proprio()));
 
--- Sem policy de INSERT em `salons`, de proposito: criar barbearia so acontece
--- dentro de criar_salao_com_convite(), que exige convite valido e nao usado.
 create policy salons_owner_leitura on public.salons as PERMISSIVE for SELECT to authenticated
   using ((dono_id = ( SELECT auth.uid() AS uid)));
 
@@ -1685,29 +1576,11 @@ create policy salon_modulos_ativacao_dono on public.salon_modulos as PERMISSIVE 
    FROM salons s
   WHERE ((s.id = salon_modulos.salon_id) AND (s.dono_id = auth.uid())))));
 
--- O painel aberto pela plataforma precisa ler o cadastro e os modulos da
--- barbearia observada. So leitura, e so para quem esta em `plataforma_admins`.
 create policy salons_observacao_leitura on public.salons as PERMISSIVE for SELECT to authenticated
   using ((eh_admin() AND (id = get_salon_id())));
 
 create policy salon_modulos_observacao_leitura on public.salon_modulos as PERMISSIVE for SELECT to authenticated
   using ((eh_admin() AND (salon_id = get_salon_id())));
-
--- ===== PRIVILEGIOS DE TABELA =====
---
--- O Supabase concede todos os privilegios a `anon` e `authenticated` em toda
--- tabela do schema `public` e deixa a protecao inteira por conta do RLS. Isso
--- resolve LINHA, mas RLS nao filtra COLUNA: as policies dizem quais linhas o
--- dono altera, nao quais campos.
---
--- Sem as revogacoes abaixo, um dono reativava a propria barbearia
--- (`salons.ativo`, derrubando o bloqueio do /admin) e liberava modulo pago
--- (`salon_modulos.disponivel`) por chamada direta a API REST, com a chave anon
--- que esta no navegador. Verificado no banco em 18/09/2026.
---
--- As demais tabelas ficam com o padrao do Supabase de proposito: nelas nao ha
--- coluna que o dono nao possa escrever, e o isolamento entre barbearias e
--- feito pelas policies de `salon_id`.
 
 revoke update on public.salons from anon, authenticated;
 grant  update (nome, slug, whatsapp, cor_primaria, logo_url)
@@ -1716,18 +1589,8 @@ grant  update (nome, slug, whatsapp, cor_primaria, logo_url)
 revoke update on public.salon_modulos from anon, authenticated;
 grant  update (ativo) on public.salon_modulos to authenticated;
 
--- `horarios_fixos` so e escrita pelas funcoes do horario fixo.
 revoke insert, update, delete on public.horarios_fixos from anon, authenticated;
 
--- ===== PRIVILEGIOS DE FUNCAO =====
---
--- O Postgres concede EXECUTE a PUBLIC por padrao em toda funcao criada, entao
--- as revogacoes abaixo sao a parte que importa: sem elas, conceder a
--- `authenticated` nao exclui o `anon`.
-
--- Nao sao chamadas por nome: as de trigger sao disparadas pelo Postgres, que
--- nao confere EXECUTE no disparo, e `horario_padrao` so e lida de dentro de
--- outras funcoes SECURITY DEFINER.
 revoke execute on function public.horario_padrao(p_dia_semana integer) from public, anon, authenticated;
 revoke execute on function public.preenche_duracao_agendamento() from public, anon, authenticated;
 revoke execute on function public.rls_auto_enable() from public, anon, authenticated;
@@ -1739,7 +1602,6 @@ revoke execute on function public.expediente_do_dia(p_salon_id uuid, p_dia date)
 revoke execute on function public.gerar_agendamentos_fixos(p_salon_id uuid, p_fixo_id uuid) from public, anon, authenticated;
 revoke execute on function public.pausa_do_dia(p_salon_id uuid, p_dia date) from public, anon, authenticated;
 
--- Funcoes de sessao: exigem login.
 revoke execute on function public.get_salon_id() from public, anon;
 grant  execute on function public.get_salon_id() to authenticated;
 revoke execute on function public.get_salon_id_proprio() from public, anon;
@@ -1789,15 +1651,12 @@ grant  execute on function public.encerrar_horario_fixo(p_fixo_id uuid) to authe
 revoke execute on function public.gerar_meus_horarios_fixos() from public, anon;
 grant  execute on function public.gerar_meus_horarios_fixos() to authenticated;
 
--- Publicas de proposito: a vitrine, o agendamento e o cadastro precisam delas
--- sem login. Estas mantem o EXECUTE que PUBLIC recebe por padrao.
 grant execute on function public.convite_valido(p_codigo text) to anon, authenticated;
 grant execute on function public.modulo_liberado(p_slug text, p_modulo text) to anon, authenticated;
 grant execute on function public.salao_ativo(p_salon_id uuid) to anon, authenticated;
 grant execute on function public.salao_publico(p_slug text) to anon, authenticated;
 grant execute on function public.slug_disponivel(p_slug text) to anon, authenticated;
 
--- A vitrine por slug nao herda o EXECUTE de PUBLIC: so anon e authenticated.
 revoke execute on function public.vitrine_servicos(p_slug text) from public;
 revoke execute on function public.vitrine_horarios(p_slug text) from public;
 revoke execute on function public.vitrine_dias_especiais(p_slug text, p_desde date) from public;
@@ -1805,10 +1664,6 @@ grant execute on function public.vitrine_servicos(p_slug text) to anon, authenti
 grant execute on function public.vitrine_horarios(p_slug text) to anon, authenticated;
 grant execute on function public.vitrine_dias_especiais(p_slug text, p_desde date) to anon, authenticated;
 
--- ===== COMENTARIOS =====
-
 comment on column public.vendas.custo_total is 'Custo do produto no momento da venda, multiplicado pela quantidade. Gravado aqui para o lucro do passado nao mudar quando o preco de custo do produto mudar.';
-
--- ===== PUBLICACAO REALTIME =====
 
 alter publication supabase_realtime add table public.agendamentos;

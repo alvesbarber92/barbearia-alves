@@ -1,27 +1,3 @@
--- Aplicada no banco em 18/09/2026 (UTC), registrada lá como
--- "estoque_movimentacao_e_custo_congelado".
---
--- O Estoque sai do "em construção". Três coisas:
---
--- 1. Categorias. A lista aceitava só cosmético ('pomada','gel','shampoo',
---    'barba','lamina'). Barbearia também revende camiseta, boné, bebida —
---    tudo isso caía em 'outro' e o filtro por categoria perdia o sentido.
---
--- 2. Custo congelado na venda. `vendas` guardava só `valor_total`. Calcular
---    lucro como (preco_venda − preco_custo) do produto HOJE reescreve o
---    passado: repor estoque mais caro mudaria o lucro de vendas antigas. É a
---    mesma armadilha da duração do serviço, que já custou caro neste projeto.
---    O custo do momento passa a ficar gravado na linha da venda.
---
--- 3. Entrada e saída como função, para o par "mexe na quantidade" + "registra
---    a venda" acontecer junto ou não acontecer.
---
--- As funções são SECURITY INVOKER de propósito — é o padrão, dito em voz alta.
--- Rodando como quem chamou, as policies valem: o dono grava, e o admin da
--- plataforma em modo de observação esbarra na policy de escrita, como em
--- qualquer outra tela. SECURITY DEFINER aqui abriria um buraco no somente
--- leitura que a observação promete.
-
 alter table public.estoque drop constraint if exists estoque_categoria_check;
 alter table public.estoque add constraint estoque_categoria_check
   check (categoria is null or categoria = any (array[
@@ -50,8 +26,6 @@ begin
     raise exception 'quantidade_invalida' using errcode = 'P0001';
   end if;
 
-  -- Compra mais cara ou mais barata atualiza o custo do produto dali em
-  -- diante. As vendas já feitas não se mexem: o custo delas está congelado.
   update estoque
      set quantidade  = coalesce(quantidade, 0) + p_quantidade,
          preco_custo = coalesce(p_preco_custo, preco_custo)
@@ -85,8 +59,6 @@ begin
     raise exception 'quantidade_invalida' using errcode = 'P0001';
   end if;
 
-  -- `for update` segura a linha até o fim da transação: duas baixas do mesmo
-  -- produto ao mesmo tempo não podem ler o mesmo saldo e vender duas vezes.
   select * into v_item from estoque where id = p_produto_id for update;
 
   if not found then

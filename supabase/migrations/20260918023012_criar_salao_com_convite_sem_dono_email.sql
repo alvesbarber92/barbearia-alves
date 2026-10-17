@@ -1,20 +1,3 @@
--- Aplicada no banco em 18/09/2026 (UTC), registrada lá como
--- "criar_salao_com_convite_sem_dono_email".
---
--- Corrige a migration anterior. `salons.dono_email` foi removida do banco pelo
--- painel, sem migration, quando o e-mail do dono passou a vir de `auth.users`
--- por `dono_id` — dá para ver isso em `admin_listar_saloes`, que hoje faz
--- `left join auth.users u on u.id = s.dono_id`. A remoção foi acertada: um
--- e-mail só, num lugar só. O que faltou foi o arquivo registrando a mudança.
---
--- Sem esse registro, a migration de 15/09 ficou no repositório inserindo numa
--- coluna que já não existia, e ao ser aplicada em 18/09 recolocou o erro no
--- banco. PL/pgSQL não valida nome de coluna na criação da função, só na
--- execução, então nada reclamou: a primeira barbearia nova é que descobriria,
--- no meio do cadastro.
---
--- Mesma função, mesma trava de slug reservado, inserindo só o que existe.
-
 create or replace function public.criar_salao_com_convite(
   p_nome              text,
   p_slug              text,
@@ -56,8 +39,6 @@ begin
     raise exception 'slug_reservado' using errcode = 'P0001';
   end if;
 
-  -- `for update` segura a linha até o fim desta transação: em dois cadastros
-  -- simultâneos com o mesmo código, o segundo espera e encontra `usado_por`.
   select * into v_convite from convites c where c.codigo = v_codigo for update;
 
   if not found or v_convite.usado_por is not null then

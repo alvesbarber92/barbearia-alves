@@ -1,6 +1,3 @@
--- Registro do aceite dos Termos de Uso pela proprietária.
--- Nulo nos salões já existentes: eles se cadastraram antes de existir aceite,
--- e inventar uma data seria falsear a prova. Ficam nulos de propósito.
 alter table public.salons
   add column if not exists termos_aceitos_em timestamptz,
   add column if not exists termos_versao     text;

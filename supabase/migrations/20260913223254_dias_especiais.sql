@@ -1,22 +1,3 @@
--- Dias especiais: o dono fecha uma data (feriado, folga) ou dá a ela um horário
--- diferente do da semana, pelo calendário em Configurações > Horários.
---
--- Aplicada no banco em 13/09/2026 pelo conector (registrada lá como
--- "dias_especiais"). Antes, conferido que criar_agendamento_cliente no banco
--- tinha a mesma lógica de 20260911034500, de onde o corpo abaixo parte.
---
--- Precedência do horário de um dia, igual no banco e nas telas:
---   1. linha em dias_especiais para a data (fechado, ou abertura/fechamento)
---   2. linha em horarios para o dia da semana (ativo ou não)
---   3. padrão 09:00–18:00
---
--- Fechar um dia NÃO cancela o que já estava marcado nele (decisão do Ricardo,
--- 13/09/2026): a tela avisa quantos agendamentos ficam e eles continuam.
---
--- criar_agendamento_cliente passa a recusar dia fechado e horário fora do
--- expediente. Até aqui o horário de funcionamento era só filtro de tela.
--- Datas e horas são lidas em America/Sao_Paulo.
-
 create table public.dias_especiais (
   id uuid default gen_random_uuid() not null primary key,
   salon_id uuid not null references public.salons(id) on delete cascade,
@@ -38,13 +19,11 @@ create policy dias_especiais_isolamento on public.dias_especiais as PERMISSIVE f
   using ((salon_id = get_salon_id()))
   with check ((salon_id = get_salon_id()));
 
--- Mesma regra de horarios: o link de agendamento lê sem login.
 create policy dias_especiais_vitrine_leitura on public.dias_especiais as PERMISSIVE for SELECT to anon, authenticated
   using (salao_ativo(salon_id));
 
 grant select on public.dias_especiais to anon;
 grant select, insert, update, delete on public.dias_especiais to authenticated;
-
 
 CREATE OR REPLACE FUNCTION public.criar_agendamento_cliente(p_salon_id uuid, p_servico_id uuid, p_data_hora timestamp with time zone, p_nome text, p_telefone text, p_observacoes text DEFAULT NULL::text)
  RETURNS uuid
@@ -76,8 +55,6 @@ begin
     raise exception 'A data do agendamento tem de ser futura' using errcode = 'P0001';
   end if;
 
-  -- Serviço tem de pertencer a este salão e estar ativo. É o que impede
-  -- preço forjado e agendamento de serviço de outra barbearia.
   select s.nome, s.preco, coalesce(s.duracao, 30) into v_nome_serv, v_preco, v_duracao
   from servicos s
   where s.id = p_servico_id and s.salon_id = p_salon_id and s.ativo;
@@ -90,7 +67,6 @@ begin
     raise exception 'Barbearia indisponível' using errcode = 'P0001';
   end if;
 
-  -- Expediente do dia, na precedência do cabeçalho.
   v_local := p_data_hora at time zone 'America/Sao_Paulo';
   v_dia   := v_local::date;
 
@@ -111,13 +87,10 @@ begin
     v_fechado := not v_ativo;
   end if;
 
-  -- As mensagens são lidas pelo AgendarPage: mudar o texto quebra o aviso.
   if v_fechado then
     raise exception 'A barbearia não abre neste dia' using errcode = 'P0001';
   end if;
 
-  -- Serviço sem duração conta 30 min, como no trigger de conflito. A tela usa
-  -- 60, então o banco nunca recusa um horário que a tela ofereceu.
   if v_local < v_dia + v_abertura
      or v_local + make_interval(mins => v_duracao) > v_dia + v_fechamento then
     raise exception 'Horário fora do expediente da barbearia' using errcode = 'P0001';

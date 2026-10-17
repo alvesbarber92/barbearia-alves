@@ -1,41 +1,13 @@
--- Horário fixo: o cliente que vem toda sexta às 18:00 fica com o horário
--- reservado, e ninguém mais consegue marcar por cima.
---
--- A regra mora em `horarios_fixos`, mas o que reserva a agenda são linhas de
--- verdade em `agendamentos`, uma por data, até o limite de 3 meses que a agenda
--- já tem. Assim a trava de conflito (`valida_conflito_agendamento`) protege o
--- horário sem mudar nada, e Agenda, Dashboard e Financeiro enxergam cada data
--- como um atendimento comum: concluído, faltou, receita no dia certo.
---
--- A janela de 3 meses anda um dia por dia. As datas novas são criadas por
--- `gerar_agendamentos_fixos`, chamada em dois lugares:
---   * `criar_agendamento_cliente`, ANTES de gravar o agendamento do link. É o
---     que fecha a brecha: no dia em que uma sexta nova entra na janela, o
---     cliente do link não consegue pegá-la antes do fixo.
---   * a tela de Agenda do dono, ao abrir (`gerar_meus_horarios_fixos`), para o
---     dono também não marcar por cima.
---
--- Só acrescenta: tabela nova, coluna nova que aceita nulo e funções novas. A
--- única função existente que muda é `criar_agendamento_cliente`, e sem nenhum
--- horário fixo cadastrado ela se comporta exatamente como antes.
-
--- ===== TABELA =====
-
 create table public.horarios_fixos (
   id                uuid        not null default gen_random_uuid(),
   salon_id          uuid        not null,
   cliente_id        uuid        not null,
   servico_id        uuid,
-  -- Primeira data. As seguintes saem dela somando o intervalo, então o dia da
-  -- semana é sempre o mesmo. "Mensal" é a cada 4 semanas, não "todo dia 25":
-  -- o cliente de sexta continua na sexta.
   data_inicio       date        not null,
   hora              time        not null,
   intervalo_semanas integer     not null,
   observacoes       text,
   ativo             boolean     not null default true,
-  -- Até onde as datas já foram criadas. Data cancelada antes disso não volta:
-  -- é o dono dizendo "essa sexta ele não vem".
   gerado_ate        date,
   criado_em         timestamptz not null default now(),
   encerrado_em      timestamptz,
@@ -53,25 +25,16 @@ create index idx_horarios_fixos_salon on public.horarios_fixos using btree (salo
 
 alter table public.horarios_fixos enable row level security;
 
--- Só leitura direta. Criar, gerar e encerrar passam pelas funções abaixo, que
--- conferem se o cliente e o serviço são da barbearia. Sem policy de escrita, o
--- RLS já recusa; o revoke deixa isso explícito.
 create policy horarios_fixos_leitura on public.horarios_fixos as permissive for select to authenticated
   using ((salon_id = get_salon_id()));
 
 revoke insert, update, delete on public.horarios_fixos from anon, authenticated;
 
--- De qual horário fixo o agendamento veio. Nulo em todo agendamento avulso,
--- que é o que existe hoje.
 alter table public.agendamentos add column fixo_id uuid;
 alter table public.agendamentos add constraint agendamentos_fixo_id_fkey foreign key (fixo_id)
   references public.horarios_fixos(id) on delete set null;
 create index idx_agendamentos_fixo on public.agendamentos using btree (fixo_id) where fixo_id is not null;
 
--- ===== FUNÇÕES INTERNAS =====
-
--- Expediente de um dia: data especial, linha da semana, padrão. A mesma
--- precedência de `criar_agendamento_cliente` e da tela.
 create or replace function public.expediente_do_dia(p_salon_id uuid, p_dia date,
   out fechado boolean, out abertura time, out fechamento time)
 language plpgsql stable security definer set search_path = public, pg_temp as $$
@@ -92,12 +55,6 @@ begin
   fechado := not coalesce(v_ativo, false);
 end $$;
 
--- Cria as datas que faltam dos horários fixos ativos de uma barbearia, até o
--- limite de 3 meses. Devolve o que aconteceu com cada data nova:
---   marcado  -> virou agendamento
---   ocupado  -> já havia alguém nesse horário; a data é pulada, ninguém perde
---               o horário que já tinha
---   fechado  -> a barbearia não abre, ou o serviço não cabe no expediente
 create or replace function public.gerar_agendamentos_fixos(p_salon_id uuid, p_fixo_id uuid default null)
 returns table(fixo uuid, dia date, situacao text)
 language plpgsql security definer set search_path = public, pg_temp as $$
@@ -105,7 +62,6 @@ declare
   f         record;
   v_exp     record;
   v_hoje    date := (now() at time zone 'America/Sao_Paulo')::date;
-  -- Último dia que `valida_limite_agendamento` aceita
   v_limite  date := ((now() at time zone 'America/Sao_Paulo')::date + interval '3 months')::date;
   v_passo   integer;
   v_dia     date;
@@ -114,8 +70,6 @@ declare
   v_preco   numeric;
   v_duracao integer;
 begin
-  -- Mesma trava do trigger de conflito: duas gerações simultâneas (dois
-  -- clientes marcando ao mesmo tempo) não criam a mesma data duas vezes.
   perform pg_advisory_xact_lock(hashtextextended(p_salon_id::text, 0));
 
   for f in
@@ -128,13 +82,11 @@ begin
   loop
     select s.nome, s.preco, coalesce(s.duracao, 30) into v_nome, v_preco, v_duracao
     from servicos s where s.id = f.servico_id;
-    -- Serviço apagado: o fixo para de gerar, mas as datas já criadas ficam.
     continue when v_nome is null;
 
     v_passo := 7 * f.intervalo_semanas;
     v_dia := f.data_inicio;
     if f.gerado_ate is not null and f.gerado_ate >= v_dia then
-      -- Primeira data depois da última já gerada
       v_dia := f.data_inicio + ((f.gerado_ate - f.data_inicio) / v_passo + 1) * v_passo;
     end if;
 
@@ -147,7 +99,7 @@ begin
         if v_exp.fechado
            or f.hora < v_exp.abertura
            or f.hora + make_interval(mins => v_duracao) > v_exp.fechamento
-           or f.hora + make_interval(mins => v_duracao) < f.hora then  -- passou da meia-noite
+           or f.hora + make_interval(mins => v_duracao) < f.hora then
           situacao := 'fechado';
         elsif exists (
           select 1 from agendamentos a
@@ -172,8 +124,6 @@ begin
     update horarios_fixos set gerado_ate = v_limite where id = f.id;
   end loop;
 end $$;
-
--- ===== FUNÇÕES DO DONO =====
 
 create or replace function public.criar_horario_fixo(p_cliente_id uuid, p_servico_id uuid,
   p_data_inicio date, p_hora time, p_intervalo_semanas integer, p_observacoes text default null)
@@ -214,14 +164,11 @@ begin
 
   return query select * from public.gerar_agendamentos_fixos(v_salon, v_id);
 
-  -- Nenhuma data livre: desfaz tudo em vez de deixar um fixo que não reserva nada
   if not exists (select 1 from agendamentos a where a.fixo_id = v_id) then
     raise exception 'Nenhuma data livre para esse horário fixo' using errcode = 'P0001';
   end if;
 end $$;
 
--- Encerra o fixo e libera as datas futuras. As passadas ficam como estão:
--- são histórico e receita.
 create or replace function public.encerrar_horario_fixo(p_fixo_id uuid)
 returns integer
 language plpgsql security definer set search_path = public, pg_temp as $$
@@ -246,8 +193,6 @@ begin
   return v_canceladas;
 end $$;
 
--- Chamada pela tela de Agenda ao abrir. Admin observando não tem barbearia
--- própria: não gera nada, e a observação continua somente leitura.
 create or replace function public.gerar_meus_horarios_fixos()
 returns integer
 language plpgsql security definer set search_path = public, pg_temp as $$
@@ -261,11 +206,6 @@ begin
   where g.situacao = 'marcado';
   return v_marcados;
 end $$;
-
--- ===== AGENDAMENTO PELO LINK =====
---
--- Duas mudanças, marcadas com "Horário fixo" abaixo. O resto é idêntico à
--- versão anterior.
 
 CREATE OR REPLACE FUNCTION public.criar_agendamento_cliente(p_salon_id uuid, p_servico_id uuid, p_data_hora timestamp with time zone, p_nome text, p_telefone text, p_observacoes text DEFAULT NULL::text)
  RETURNS uuid
@@ -297,8 +237,6 @@ begin
     raise exception 'A data do agendamento tem de ser futura' using errcode = 'P0001';
   end if;
 
-  -- Serviço tem de pertencer a este salão e estar ativo. É o que impede
-  -- preço forjado e agendamento de serviço de outra barbearia.
   select s.nome, s.preco, coalesce(s.duracao, 30) into v_nome_serv, v_preco, v_duracao
   from servicos s
   where s.id = p_servico_id and s.salon_id = p_salon_id and s.ativo;
@@ -311,17 +249,12 @@ begin
     raise exception 'Barbearia indisponível' using errcode = 'P0001';
   end if;
 
-  -- Horário fixo: cria as datas que entraram na janela de 3 meses ANTES de
-  -- gravar este agendamento, para o cliente do link não pegar o horário de
-  -- quem é fixo. Se a geração falhar, o agendamento segue: um defeito no fixo
-  -- não pode impedir a barbearia de receber cliente.
   begin
     perform public.gerar_agendamentos_fixos(p_salon_id);
   exception when others then
     raise warning 'gerar_agendamentos_fixos falhou para %: %', p_salon_id, sqlerrm;
   end;
 
-  -- Expediente do dia: data especial, linha da semana, padrão.
   v_local := p_data_hora at time zone 'America/Sao_Paulo';
   v_dia   := v_local::date;
 
@@ -335,21 +268,16 @@ begin
     where h.salon_id = p_salon_id and h.dia_semana = extract(dow from v_dia)::int;
 
     if not found then
-      -- Dia sem linha: não deveria mais acontecer, as linhas nascem com a
-      -- barbearia. Vale o mesmo padrão do cadastro.
       select p.ativo, p.abertura, p.fechamento into v_ativo, v_abertura, v_fechamento
       from public.horario_padrao(extract(dow from v_dia)::int) as p;
     end if;
     v_fechado := not v_ativo;
   end if;
 
-  -- As mensagens são lidas pelo AgendarPage: mudar o texto quebra o aviso.
   if v_fechado then
     raise exception 'A barbearia não abre neste dia' using errcode = 'P0001';
   end if;
 
-  -- Serviço sem duração conta 30 min, como no trigger de conflito. A tela usa
-  -- 60, então o banco nunca recusa um horário que a tela ofereceu.
   if v_local < v_dia + v_abertura
      or v_local + make_interval(mins => v_duracao) > v_dia + v_fechamento then
     raise exception 'Horário fora do expediente da barbearia' using errcode = 'P0001';
@@ -372,10 +300,6 @@ begin
      where id = v_cliente;
   end if;
 
-  -- limite de 2 agendamentos futuros por cliente, para evitar que alguém
-  -- trave a agenda marcando horário em série.
-  -- Horário fixo: as datas do fixo não contam. Foi o dono quem marcou, e com
-  -- elas contando o cliente fixo nunca mais marcaria um horário extra.
   select count(*) into v_futuros
   from agendamentos a
   where a.cliente_id = v_cliente
@@ -399,8 +323,6 @@ begin
 end;
 $function$
 ;
-
--- ===== PRIVILÉGIOS =====
 
 revoke execute on function public.expediente_do_dia(p_salon_id uuid, p_dia date) from public, anon, authenticated;
 revoke execute on function public.gerar_agendamentos_fixos(p_salon_id uuid, p_fixo_id uuid) from public, anon, authenticated;

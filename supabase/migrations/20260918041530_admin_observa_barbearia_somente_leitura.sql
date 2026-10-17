@@ -1,16 +1,3 @@
--- Aplicada no banco em 18/09/2026 (UTC), registrada lá como
--- "admin_observa_barbearia_somente_leitura".
---
--- Admin da plataforma passa a abrir o painel de uma barbearia para acompanhar
--- como ela está, SEM poder alterar nada. Em vez de recriar cada tela dentro do
--- /admin, a observação entra no ponto onde todas já se apoiam: `get_salon_id()`.
--- Dashboard, agenda, clientes e financeiro funcionam sem uma linha alterada.
---
--- São quatro policies por tabela, e não uma só com WITH CHECK, por um detalhe
--- do Postgres: **DELETE não passa por WITH CHECK**, só por USING. Com uma
--- policy FOR ALL, o observador não conseguiria editar nada e ainda assim
--- conseguiria apagar — o oposto do que "somente leitura" promete.
-
 create table if not exists public.admin_observando (
   admin_id    uuid primary key references auth.users(id) on delete cascade,
   salon_id    uuid not null references public.salons(id) on delete cascade,
@@ -18,12 +5,9 @@ create table if not exists public.admin_observando (
 );
 
 alter table public.admin_observando enable row level security;
--- Sem policy, de propósito: só as funções SECURITY DEFINER abaixo mexem nela.
 
 create index if not exists idx_admin_observando_salon on public.admin_observando (salon_id);
 
--- A barbearia PRÓPRIA de quem chama. É o que `get_salon_id()` fazia antes, e
--- continua sendo a regra para escrever: observação nunca dá direito de gravar.
 create or replace function public.get_salon_id_proprio()
 returns uuid
 language sql
@@ -36,8 +20,6 @@ as $fn$
    limit 1;
 $fn$;
 
--- A barbearia que quem chama está vendo: a observada, se for admin da
--- plataforma em observação; senão, a própria.
 create or replace function public.get_salon_id()
 returns uuid
 language sql
@@ -79,7 +61,6 @@ begin
   end loop;
 end $$;
 
--- O painel também lê o cadastro da barbearia e os módulos liberados.
 create policy salons_observacao_leitura on public.salons
   as permissive for select to authenticated
   using (public.eh_admin() and id = public.get_salon_id());
@@ -87,8 +68,6 @@ create policy salons_observacao_leitura on public.salons
 create policy salon_modulos_observacao_leitura on public.salon_modulos
   as permissive for select to authenticated
   using (public.eh_admin() and salon_id = public.get_salon_id());
-
--- ===== Entrar, sair e saber onde se está =====
 
 create or replace function public.admin_observar_salao(p_salon_id uuid)
 returns text
@@ -138,13 +117,6 @@ begin
 end
 $fn$;
 
--- Alimenta o contexto do frontend: a barbearia que a sessão enxerga e se ela
--- está sendo observada. Substitui a leitura direta de `salons` por `dono_id`,
--- que não encontrava nada para o admin.
---
--- ⚠️ Esta versão tem um erro, corrigido na migration seguinte
--- (20260918041914): resolver por `get_salon_id()` faz o dono de uma barbearia
--- DESATIVADA receber `salon = null`, e a tela de bloqueio deixa de aparecer.
 create or replace function public.salao_atual()
 returns jsonb
 language sql

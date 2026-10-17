@@ -1,33 +1,3 @@
--- Aplicada no banco em 18/09/2026 (UTC), registrada lá como
--- "vitrine_por_slug_e_ocupados_so_com_login".
---
--- Fecha os dois vazamentos entre barbearias que sobravam depois da correção de
--- privilégio de coluna. Nenhum deles expunha dado privado — preço, horário de
--- funcionamento e agenda cheia/vazia já aparecem na página pública de cada
--- barbearia. O problema era poder varrer a base inteira de uma vez.
---
--- ===== 1. Vitrine sem recorte =====
---
--- As policies `servicos_vitrine_leitura`, `horarios_vitrine_leitura` e
--- `dias_especiais_vitrine_leitura` liberavam leitura de TODAS as barbearias
--- ativas, não só a que está sendo visitada. RLS não resolve isso sozinho: a
--- policy não tem como saber qual barbearia o visitante está olhando. A saída é
--- fechar a tabela e servir a vitrine por função, que recebe o slug.
---
--- ===== 2. horarios_ocupados pública =====
---
--- Qualquer pessoa lia a agenda cheia/vazia de qualquer barbearia, bastando o
--- salon_id — que sai de `salao_publico`. A tela só mostra horário depois do
--- login do cliente, então `anon` não precisa da função. A janela também passa a
--- ter teto: a tela pede um dia por vez, e sem limite alguém puxava um ano numa
--- chamada só.
---
--- O frontend acompanha esta migration no mesmo commit: `AgendarPage` e
--- `SalonPublicPage` passam a chamar as RPCs, e o `userId` entra na chave do
--- efeito de `horarios_ocupados` — sem isso a busca dispararia antes do login,
--- tomaria 403 e não rodaria de novo, deixando o cliente com erro no lugar dos
--- horários.
-
 create or replace function public.vitrine_servicos(p_slug text)
 returns table (id uuid, nome text, preco numeric, duracao integer)
 language sql
@@ -75,9 +45,6 @@ grant  execute on function public.vitrine_servicos(text)                to anon,
 grant  execute on function public.vitrine_horarios(text)                to anon, authenticated;
 grant  execute on function public.vitrine_dias_especiais(text, date)    to anon, authenticated;
 
--- Com a vitrine servida por função, a leitura direta das tabelas deixa de ser
--- necessária. O dono continua lendo as suas pelas policies de isolamento, e o
--- cliente logado passa a enxergar a barbearia só pelas funções acima.
 drop policy if exists servicos_vitrine_leitura       on public.servicos;
 drop policy if exists horarios_vitrine_leitura       on public.horarios;
 drop policy if exists dias_especiais_vitrine_leitura on public.dias_especiais;
