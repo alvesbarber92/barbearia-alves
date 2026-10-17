@@ -352,7 +352,7 @@ export default function AgendamentosPage() {
     toast.success(`Horário fixo criado: ${marcadas} ${marcadas === 1 ? 'data reservada' : 'datas reservadas'}`)
     if (puladas.length > 0) {
       toast(`Ficaram de fora: ${puladas.map(p =>
-        `${diaMes(p.dia)} (${p.situacao === 'ocupado' ? 'já tinha cliente' : p.situacao === 'pausa' ? 'almoço' : 'fechado'})`).join(', ')}`,
+        `${diaMes(p.dia)} (${p.situacao === 'ocupado' ? 'já tinha cliente' : p.situacao === 'pausa' ? 'almoço' : p.situacao === 'bloqueado' ? 'horário bloqueado' : 'fechado'})`).join(', ')}`,
         { duration: 10000 })
     }
     setShowModal(false)

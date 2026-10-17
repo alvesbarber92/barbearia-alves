@@ -1257,6 +1257,14 @@ begin
               and f.hora + make_interval(mins => v_duracao) > v_pausa.inicio then
           situacao := 'pausa';
         elsif exists (
+          select 1 from bloqueios_horario b
+          where b.salon_id = p_salon_id
+            and b.data = v_dia
+            and f.hora < b.inicio + make_interval(mins => b.minutos)
+            and f.hora + make_interval(mins => v_duracao) > b.inicio
+        ) then
+          situacao := 'bloqueado';
+        elsif exists (
           select 1 from agendamentos a
           where a.salon_id = p_salon_id
             and a.status <> 'cancelado'
