@@ -336,7 +336,8 @@ export default function ClientesPage() {
 function ClienteCard({ cliente, onEditar, confirmandoExclusao, onPedirExclusao, onConfirmarExclusao }) {
   const { frequente, inativa } = classificar(cliente)
   const inicial = cliente.nome.trim()[0]?.toUpperCase() ?? '?'
-  const whatsappUrl = `https://wa.me/55${cliente.telefone.replace(/\D/g, '')}`
+  const digitos = (cliente.telefone || '').replace(/\D/g, '')
+  const whatsappUrl = digitos ? `https://wa.me/55${digitos}` : null
 
   return (
     <div className="card h-full flex flex-col gap-3">
@@ -366,10 +367,12 @@ function ClienteCard({ cliente, onEditar, confirmandoExclusao, onPedirExclusao, 
       </div>
 
       <div className="flex flex-col gap-1">
-        <div className="flex items-center gap-1.5 text-sm text-cal-2">
-          <Phone size={13} className="shrink-0 text-cal-3" />
-          <span className="truncate num">{formatarTelefone(cliente.telefone)}</span>
-        </div>
+        {cliente.telefone && (
+          <div className="flex items-center gap-1.5 text-sm text-cal-2">
+            <Phone size={13} className="shrink-0 text-cal-3" />
+            <span className="truncate num">{formatarTelefone(cliente.telefone)}</span>
+          </div>
+        )}
         {cliente.email && (
           <div className="flex items-center gap-1.5 text-sm text-cal-2">
             <Mail size={13} className="shrink-0 text-cal-3" />
@@ -389,15 +392,17 @@ function ClienteCard({ cliente, onEditar, confirmandoExclusao, onPedirExclusao, 
       </div>
 
       <div className="flex gap-1 pt-2 mt-auto border-t border-junta">
-        <a
-          href={whatsappUrl}
-          target="_blank"
-          rel="noreferrer"
-          className="p-2 rounded-controle transition-colors text-cal-2 hover:bg-elevado hover:text-ok"
-          title="Abrir WhatsApp"
-        >
-          <MessageCircle size={16} />
-        </a>
+        {whatsappUrl && (
+          <a
+            href={whatsappUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="p-2 rounded-controle transition-colors text-cal-2 hover:bg-elevado hover:text-ok"
+            title="Abrir WhatsApp"
+          >
+            <MessageCircle size={16} />
+          </a>
+        )}
         <button
           onClick={onEditar}
           className="p-2 rounded-controle transition-colors text-cal-2 hover:bg-elevado hover:text-cal"
